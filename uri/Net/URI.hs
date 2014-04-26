@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 --------------------------------------------------------------------------------
 -- |
@@ -65,13 +64,13 @@ module Net.URI
       URI(..)
     , URIAuth(..)
     , nullURI
-      
+
     -- * Parsing
     , parseURI
     , parseURIReference
     , parseRelativeReference
     , parseAbsoluteURI
-      
+
     -- * Test for strings containing various kinds of URI
     , isURI
     , isURIReference
@@ -79,16 +78,16 @@ module Net.URI
     , isAbsoluteURI
     , isIPv6address
     , isIPv4address
-      
+
     -- * Predicates
     , uriIsAbsolute
     , uriIsRelative
-      
+
     -- * Relative URIs
     , relativeTo
     , nonStrictRelativeTo
     , relativeFrom
-      
+
     -- * Operations on URI strings
     -- | Support for putting strings into URI-friendly
     --   escaped format and getting them back again.
@@ -104,17 +103,11 @@ module Net.URI
     , escapeURIChar
     , escapeURIString
     , unEscapeString
-      
+
     -- * URI Normalization functions
     , normalizeCase
     , normalizeEscape
     , normalizePathSegments
-      
-    -- * Deprecated functions
-    , parseabsoluteURI
-    , escapeString
-    , reserved, unreserved
-    , scheme, authority, path, query, fragment
     ) where
 
 import Text.ParserCombinators.Parsec
@@ -125,22 +118,14 @@ import Text.ParserCombinators.Parsec
     , unexpected
     )
 
+import Control.Applicative hiding ((<|>), many)
 import Control.Monad (MonadPlus(..))
 import Data.Char (ord, chr, isHexDigit, toLower, toUpper, digitToInt)
-import Data.Bits ((.|.),(.&.),shiftL,shiftR)
-import Debug.Trace (trace)
+import Data.Bits ((.&.),shiftR)
 import Numeric (showIntAtBase)
 
-#ifdef __GLASGOW_HASKELL__
 import Data.Typeable (Typeable)
-# if MIN_VERSION_base(4,0,0)
 import Data.Data (Data)
-# else
-import Data.Generics (Data)
-# endif
-#else
-import Data.Typeable (Typeable(..), TyCon, mkTyCon, mkTyConApp)
-#endif
 
 ------------------------------------------------------------
 --  The URI datatype
@@ -161,38 +146,14 @@ data URI = URI
     , uriPath       :: String           -- ^ @\/ghc@
     , uriQuery      :: String           -- ^ @?query@
     , uriFragment   :: String           -- ^ @#frag@
-    } deriving (Eq, Ord
-#ifdef __GLASGOW_HASKELL__
-    , Typeable, Data
-#endif
-    )
-
-#ifndef __GLASGOW_HASKELL__
-uriTc :: TyCon
-uriTc = mkTyCon "URI"
-
-instance Typeable URI where
-  typeOf _ = mkTyConApp uriTc []
-#endif
+    } deriving (Eq, Ord, Typeable, Data)
 
 -- |Type for authority value within a URI
 data URIAuth = URIAuth
     { uriUserInfo   :: String           -- ^ @anonymous\@@
     , uriRegName    :: String           -- ^ @www.haskell.org@
     , uriPort       :: String           -- ^ @:42@
-    } deriving (Eq, Ord, Show
-#ifdef __GLASGOW_HASKELL__
-    , Typeable, Data
-#endif
-    )
-
-#ifndef __GLASGOW_HASKELL__
-uriAuthTc :: TyCon
-uriAuthTc = mkTyCon "URIAuth"
-
-instance Typeable URIAuth where
-  typeOf _ = mkTyConApp uriAuthTc []
-#endif
+    } deriving (Eq, Ord, Show, Typeable, Data)
 
 -- |Blank URI
 nullURI :: URI
@@ -219,7 +180,7 @@ instance Show URI where
 
 defaultUserInfoMap :: String -> String
 defaultUserInfoMap uinf = user++newpass
-    where
+  where
         (user,pass) = break (==':') uinf
         newpass     = if null pass || (pass == "@")
                                    || (pass == ":@")
@@ -331,11 +292,10 @@ isValidParse parser uristr = case parseAll parser "" uristr of
 parseAll :: URIParser a -> String -> String -> Either ParseError a
 parseAll parser filename uristr = parse newparser filename uristr
     where
-        newparser =
-            do  { res <- parser
-                ; eof
-                ; return res
-                }
+        newparser = do
+            res <- parser
+            eof
+            return res
 
 ------------------------------------------------------------
 --  Predicates
@@ -360,12 +320,11 @@ type URIParser a = GenParser Char () a
 --  Parse and return a 'pct-encoded' sequence
 --
 escaped :: URIParser String
-escaped =
-    do  { char '%'
-        ; h1 <- hexDigitChar
-        ; h2 <- hexDigitChar
-        ; return $ ['%',h1,h2]
-        }
+escaped = do
+    char '%'
+    h1 <- hexDigitChar
+    h2 <- hexDigitChar
+    return $ ['%',h1,h2]
 
 --  RFC3986, section 2.2
 --
@@ -411,69 +370,61 @@ unreservedChar = do { c <- satisfy isUnreserved ; return [c] }
 --               / path-empty
 
 uri :: URIParser URI
-uri =
-    do  { us <- try uscheme
-        -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
-        -- ; up <- upath
-        ; (ua,up) <- hierPart
-        ; uq <- option "" ( do { char '?' ; uquery    } )
-        ; uf <- option "" ( do { char '#' ; ufragment } )
-        ; return $ URI
-            { uriScheme    = us
-            , uriAuthority = ua
-            , uriPath      = up
-            , uriQuery     = uq
-            , uriFragment  = uf
-            }
+uri = do
+    us <- try uscheme
+    -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
+    -- ; up <- upath
+    (ua,up) <- hierPart
+    uq <- option "" ( do { char '?' ; uquery    } )
+    uf <- option "" ( do { char '#' ; ufragment } )
+    return $ URI
+        { uriScheme    = us
+        , uriAuthority = ua
+        , uriPath      = up
+        , uriQuery     = uq
+        , uriFragment  = uf
         }
 
 hierPart :: URIParser ((Maybe URIAuth),String)
 hierPart =
-        do  { try (string "//")
-            ; ua <- uauthority
-            ; up <- pathAbEmpty
-            ; return (ua,up)
-            }
-    <|> do  { up <- pathAbs
-            ; return (Nothing,up)
-            }
-    <|> do  { up <- pathRootLess
-            ; return (Nothing,up)
-            }
-    <|> do  { return (Nothing,"")
-            }
+        do try (string "//")
+           ua <- uauthority
+           up <- pathAbEmpty
+           return (ua,up)
+    <|> do up <- pathAbs
+           return (Nothing,up)
+    <|> do up <- pathRootLess
+           return (Nothing,up)
+    <|> do return (Nothing,"")
 
 --  RFC3986, section 3.1
 
 uscheme :: URIParser String
-uscheme =
-    do  { s <- oneThenMany alphaChar (satisfy isSchemeChar)
-        ; char ':'
-        ; return $ s++":"
-        }
+uscheme = do
+    s <- oneThenMany alphaChar (satisfy isSchemeChar)
+    char ':'
+    return $ s++":"
 
 --  RFC3986, section 3.2
 
 uauthority :: URIParser (Maybe URIAuth)
-uauthority =
-    do  { uu <- option "" (try userinfo)
-        ; uh <- host
-        ; up <- option "" port
-        ; return $ Just $ URIAuth
-            { uriUserInfo = uu
-            , uriRegName  = uh
-            , uriPort     = up
-            }
+uauthority = do
+    uu <- option "" (try userinfo)
+    uh <- host
+    up <- option "" port
+    return $ Just $ URIAuth
+        { uriUserInfo = uu
+        , uriRegName  = uh
+        , uriPort     = up
         }
 
 --  RFC3986, section 3.2.1
 
 userinfo :: URIParser String
-userinfo =
-    do  { uu <- many (uchar ";:&=+$,")
-        ; char '@'
-        ; return (concat uu ++"@")
-        }
+userinfo = do
+    uu <- many (uchar ";:&=+$,")
+    char '@'
+    return (concat uu ++"@")
 
 --  RFC3986, section 3.2.2
 
@@ -481,134 +432,113 @@ host :: URIParser String
 host = ipLiteral <|> try ipv4address <|> regName
 
 ipLiteral :: URIParser String
-ipLiteral =
-    do  { char '['
-        ; ua <- ( ipv6address <|> ipvFuture )
-        ; char ']'
-        ; return $ "[" ++ ua ++ "]"
-        }
-    <?> "IP address literal"
+ipLiteral = doParse <?> "IP address literal"
+  where doParse = do
+            char '['
+            ua <- ( ipv6address <|> ipvFuture )
+            char ']'
+            return $ "[" ++ ua ++ "]"
 
 ipvFuture :: URIParser String
-ipvFuture =
-    do  { char 'v'
-        ; h <- hexDigitChar
-        ; char '.'
-        ; a <- many1 (satisfy isIpvFutureChar)
-        ; return $ 'c':h:'.':a
-        }
+ipvFuture = do
+    char 'v'
+    h <- hexDigitChar
+    char '.'
+    a <- many1 (satisfy isIpvFutureChar)
+    return $ 'c':h:'.':a
 
 isIpvFutureChar :: Char -> Bool
 isIpvFutureChar c = isUnreserved c || isSubDelims c || (c==';')
 
 ipv6address :: URIParser String
 ipv6address =
-        try ( do
-                { a2 <- count 6 h4c
-                ; a3 <- ls32
-                ; return $ concat a2 ++ a3
-                } )
-    <|> try ( do
-                { string "::"
-                ; a2 <- count 5 h4c
-                ; a3 <- ls32
-                ; return $ "::" ++ concat a2 ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 0
-                ; string "::"
-                ; a2 <- count 4 h4c
-                ; a3 <- ls32
-                ; return $ a1 ++ "::" ++ concat a2 ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 1
-                ; string "::"
-                ; a2 <- count 3 h4c
-                ; a3 <- ls32
-                ; return $ a1 ++ "::" ++ concat a2 ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 2
-                ; string "::"
-                ; a2 <- count 2 h4c
-                ; a3 <- ls32
-                ; return $ a1 ++ "::" ++ concat a2 ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 3
-                ; string "::"
-                ; a2 <- h4c
-                ; a3 <- ls32
-                ; return $ a1 ++ "::" ++ a2 ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 4
-                ; string "::"
-                ; a3 <- ls32
-                ; return $ a1 ++ "::" ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 5
-                ; string "::"
-                ; a3 <- h4
-                ; return $ a1 ++ "::" ++ a3
-                } )
-    <|> try ( do
-                { a1 <- opt_n_h4c_h4 6
-                ; string "::"
-                ; return $ a1 ++ "::"
-                } )
+        try ( do a2 <- count 6 h4c
+                 a3 <- ls32
+                 return $ concat a2 ++ a3
+            )
+    <|> try ( do string "::"
+                 a2 <- count 5 h4c
+                 a3 <- ls32
+                 return $ "::" ++ concat a2 ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 0
+                 string "::"
+                 a2 <- count 4 h4c
+                 a3 <- ls32
+                 return $ a1 ++ "::" ++ concat a2 ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 1
+                 string "::"
+                 a2 <- count 3 h4c
+                 a3 <- ls32
+                 return $ a1 ++ "::" ++ concat a2 ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 2
+                 string "::"
+                 a2 <- count 2 h4c
+                 a3 <- ls32
+                 return $ a1 ++ "::" ++ concat a2 ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 3
+                 string "::"
+                 a2 <- h4c
+                 a3 <- ls32
+                 return $ a1 ++ "::" ++ a2 ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 4
+                 string "::"
+                 a3 <- ls32
+                 return $ a1 ++ "::" ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 5
+                 string "::"
+                 a3 <- h4
+                 return $ a1 ++ "::" ++ a3
+            )
+    <|> try ( do a1 <- opt_n_h4c_h4 6
+                 string "::"
+                 return $ a1 ++ "::"
+            )
     <?> "IPv6 address"
 
 opt_n_h4c_h4 :: Int -> URIParser String
-opt_n_h4c_h4 n = option "" $
-    do  { a1 <- countMinMax 0 n h4c
-        ; a2 <- h4
-        ; return $ concat a1 ++ a2
-        }
+opt_n_h4c_h4 n = option "" $ do
+    a1 <- countMinMax 0 n h4c
+    a2 <- h4
+    return $ concat a1 ++ a2
 
 ls32 :: URIParser String
-ls32 =  try ( do
-                { a1 <- h4c
-                ; a2 <- h4
-                ; return (a1++a2)
-                } )
-    <|> ipv4address
+ls32 = try ((++) <$> h4c <*> h4) <|> ipv4address
 
 h4c :: URIParser String
-h4c = try $
-    do  { a1 <- h4
-        ; char ':'
-        ; notFollowedBy (char ':')
-        ; return $ a1 ++ ":"
-        }
+h4c = try $ do
+    a1 <- h4
+    char ':'
+    notFollowedBy (char ':')
+    return $ a1 ++ ":"
 
 h4 :: URIParser String
 h4 = countMinMax 1 4 hexDigitChar
 
 ipv4address :: URIParser String
-ipv4address =
-    do  { a1 <- decOctet ; char '.'
-        ; a2 <- decOctet ; char '.'
-        ; a3 <- decOctet ; char '.'
-        ; a4 <- decOctet
-        ; notFollowedBy regName
-        ; return $ a1++"."++a2++"."++a3++"."++a4
-        }
-    <?> "IPv4 Address"
+ipv4address = doParse <?> "IPv4 Address"
+  where doParse = do
+            a1 <- decOctet ; char '.'
+            a2 <- decOctet ; char '.'
+            a3 <- decOctet ; char '.'
+            a4 <- decOctet
+            notFollowedBy regName
+            return $ a1++"."++a2++"."++a3++"."++a4
 
 decOctet :: URIParser String
-decOctet =
-    do  { a1 <- countMinMax 1 3 digitChar
-        ; if (read a1 :: Integer) > 255 then
-            fail "Decimal octet value too large"
-          else
-            return a1
-        }
+decOctet = do
+    a1 <- countMinMax 1 3 digitChar
+    if (read a1 :: Integer) > 255
+        then fail "Decimal octet value too large"
+        else return a1
 
 regName :: URIParser String
-regName =
+regName = do
     do  { ss <- countMinMax 0 255 ( unreservedChar <|> escaped <|> subDelims )
         ; return $ concat ss
         }
@@ -617,11 +547,10 @@ regName =
 --  RFC3986, section 3.2.3
 
 port :: URIParser String
-port =
-    do  { char ':'
-        ; p <- many digitChar
-        ; return (':':p)
-        }
+port = do
+    char ':'
+    p <- many digitChar
+    return (':':p)
 
 --
 --  RFC3986, section 3.3
@@ -654,56 +583,48 @@ upath = pathAbEmpty
 -}
 
 pathAbEmpty :: URIParser String
-pathAbEmpty =
-    do  { ss <- many slashSegment
-        ; return $ concat ss
-        }
+pathAbEmpty = do
+    ss <- many slashSegment
+    return $ concat ss
 
 pathAbs :: URIParser String
-pathAbs =
-    do  { char '/'
-        ; ss <- option "" pathRootLess
-        ; return $ '/':ss
-        }
+pathAbs = do
+    char '/'
+    ss <- option "" pathRootLess
+    return $ '/':ss
 
 pathNoScheme :: URIParser String
-pathNoScheme =
-    do  { s1 <- segmentNzc
-        ; ss <- many slashSegment
-        ; return $ concat (s1:ss)
-        }
+pathNoScheme = do
+    s1 <- segmentNzc
+    ss <- many slashSegment
+    return $ concat (s1:ss)
 
 pathRootLess :: URIParser String
-pathRootLess =
-    do  { s1 <- segmentNz
-        ; ss <- many slashSegment
-        ; return $ concat (s1:ss)
-        }
+pathRootLess = do
+    s1 <- segmentNz
+    ss <- many slashSegment
+    return $ concat (s1:ss)
 
 slashSegment :: URIParser String
-slashSegment =
-    do  { char '/'
-        ; s <- segment
-        ; return ('/':s)
-        }
+slashSegment = do
+    char '/'
+    s <- segment
+    return ('/':s)
 
 segment :: URIParser String
-segment =
-    do  { ps <- many pchar
-        ; return $ concat ps
-        }
+segment = do
+    ps <- many pchar
+    return $ concat ps
 
 segmentNz :: URIParser String
-segmentNz =
-    do  { ps <- many1 pchar
-        ; return $ concat ps
-        }
+segmentNz = do
+    ps <- many1 pchar
+    return $ concat ps
 
 segmentNzc :: URIParser String
-segmentNzc =
-    do  { ps <- many1 (uchar "@")
-        ; return $ concat ps
-        }
+segmentNzc = do
+    ps <- many1 (uchar "@")
+    return $ concat ps
 
 pchar :: URIParser String
 pchar = uchar ":@"
@@ -719,18 +640,16 @@ uchar extras =
 --  RFC3986, section 3.4
 
 uquery :: URIParser String
-uquery =
-    do  { ss <- many $ uchar (":@"++"/?")
-        ; return $ '?':concat ss
-        }
+uquery = do
+    ss <- many $ uchar (":@"++"/?")
+    return $ '?':concat ss
 
 --  RFC3986, section 3.5
 
 ufragment :: URIParser String
-ufragment =
-    do  { ss <- many $ uchar (":@"++"/?")
-        ; return $ '#':concat ss
-        }
+ufragment = do
+    ss <- many $ uchar (":@"++"/?")
+    return $ '#':concat ss
 
 --  Reference, Relative and Absolute URI forms
 --
@@ -749,20 +668,19 @@ uriReference = uri <|> relativeRef
 --                 / path-empty
 
 relativeRef :: URIParser URI
-relativeRef =
-    do  { notMatching uscheme
-        -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
-        -- ; up <- upath
-        ; (ua,up) <- relativePart
-        ; uq <- option "" ( do { char '?' ; uquery    } )
-        ; uf <- option "" ( do { char '#' ; ufragment } )
-        ; return $ URI
-            { uriScheme    = ""
-            , uriAuthority = ua
-            , uriPath      = up
-            , uriQuery     = uq
-            , uriFragment  = uf
-            }
+relativeRef = do
+    notMatching uscheme
+    -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
+    -- ; up <- upath
+    (ua,up) <- relativePart
+    uq <- option "" ( do { char '?' ; uquery    } )
+    uf <- option "" ( do { char '#' ; ufragment } )
+    return $ URI
+        { uriScheme    = ""
+        , uriAuthority = ua
+        , uriPath      = up
+        , uriQuery     = uq
+        , uriFragment  = uf
         }
 
 relativePart :: URIParser ((Maybe URIAuth),String)
@@ -784,19 +702,18 @@ relativePart =
 --  RFC3986, section 4.3
 
 absoluteURI :: URIParser URI
-absoluteURI =
-    do  { us <- uscheme
-        -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
-        -- ; up <- upath
-        ; (ua,up) <- hierPart
-        ; uq <- option "" ( do { char '?' ; uquery    } )
-        ; return $ URI
-            { uriScheme    = us
-            , uriAuthority = ua
-            , uriPath      = up
-            , uriQuery     = uq
-            , uriFragment  = ""
-            }
+absoluteURI = do
+    us <- uscheme
+    -- ; ua <- option Nothing ( do { try (string "//") ; uauthority } )
+    -- ; up <- upath
+    (ua,up) <- hierPart
+    uq <- option "" ( do { char '?' ; uquery    } )
+    return $ URI
+        { uriScheme    = us
+        , uriAuthority = ua
+        , uriPath      = up
+        , uriQuery     = uq
+        , uriFragment  = ""
         }
 
 --  Imports from RFC 2234
@@ -839,24 +756,21 @@ hexDigitChar = satisfy isHexDigitChar   -- or: Parsec.hexDigit ?
 --  Additional parser combinators for common patterns
 
 oneThenMany :: GenParser t s a -> GenParser t s a -> GenParser t s [a]
-oneThenMany p1 pr =
-    do  { a1 <- p1
-        ; ar <- many pr
-        ; return (a1:ar)
-        }
+oneThenMany p1 pr = do
+    a1 <- p1
+    ar <- many pr
+    return (a1:ar)
 
 countMinMax :: Int -> Int -> GenParser t s a -> GenParser t s [a]
-countMinMax m n p | m > 0 =
-    do  { a1 <- p
-        ; ar <- countMinMax (m-1) (n-1) p
-        ; return (a1:ar)
-        }
+countMinMax m n p | m > 0 = do
+    a1 <- p
+    ar <- countMinMax (m-1) (n-1) p
+    return (a1:ar)
 countMinMax _ n _ | n <= 0 = return []
-countMinMax _ n p = option [] $
-    do  { a1 <- p
-        ; ar <- countMinMax 0 (n-1) p
-        ; return (a1:ar)
-        }
+countMinMax _ n p = option [] $ do
+    a1 <- p
+    ar <- countMinMax 0 (n-1) p
+    return (a1:ar)
 
 notMatching :: Show a => GenParser tok st a -> GenParser tok st ()
 notMatching p = do { a <- try p ; unexpected (show a) } <|> return ()
@@ -1173,11 +1087,6 @@ relPathFrom1 pabs base = relName
 --  "directory" segtments.
 --
 relSegsFrom :: String -> String -> String
-{-
-relSegsFrom sabs base
-    | traceVal "\nrelSegsFrom\nsabs " sabs $ traceVal "base " base $
-      False = error ""
--}
 relSegsFrom []   []   = ""      -- paths are identical
 relSegsFrom sabs base =
     if sa1 == sb1
@@ -1196,11 +1105,6 @@ relSegsFrom sabs base =
 --  base.  Thus, when base is empty, the desired path has been found.
 --
 difSegsFrom :: String -> String -> String
-{-
-difSegsFrom sabs base
-    | traceVal "\ndifSegsFrom\nsabs " sabs $ traceVal "base " base $
-      False = error ""
--}
 difSegsFrom sabs ""   = sabs
 difSegsFrom sabs base = difSegsFrom ("../"++sabs) (snd $ nextSegment base)
 
@@ -1236,71 +1140,11 @@ normalizeEscape []             = []
 --
 normalizePathSegments :: String -> String
 normalizePathSegments uristr = normstr juri
-    where
+  where
         juri = parseURI uristr
         normstr Nothing  = uristr
         normstr (Just u) = show (normuri u)
         normuri u = u { uriPath = removeDotSegments (uriPath u) }
-
-------------------------------------------------------------
---  Local trace helper functions
-------------------------------------------------------------
-
-traceShow :: Show a => String -> a -> a
-traceShow msg x = trace (msg ++ show x) x
-
-traceVal :: Show a => String -> a -> b -> b
-traceVal msg x y = trace (msg ++ show x) y
-
-------------------------------------------------------------
---  Deprecated functions
-------------------------------------------------------------
-
-{-# DEPRECATED parseabsoluteURI "use parseAbsoluteURI" #-}
-parseabsoluteURI :: String -> Maybe URI
-parseabsoluteURI = parseAbsoluteURI
-
-{-# DEPRECATED escapeString "use escapeURIString, and note the flipped arguments" #-}
-escapeString :: String -> (Char->Bool) -> String
-escapeString = flip escapeURIString
-
-{-# DEPRECATED reserved "use isReserved" #-}
-reserved :: Char -> Bool
-reserved = isReserved
-
-{-# DEPRECATED unreserved "use isUnreserved" #-}
-unreserved :: Char -> Bool
-unreserved = isUnreserved
-
---  Additional component access functions for backward compatibility
-
-{-# DEPRECATED scheme "use uriScheme" #-}
-scheme :: URI -> String
-scheme = orNull init . uriScheme
-
-{-# DEPRECATED authority "use uriAuthority, and note changed functionality" #-}
-authority :: URI -> String
-authority = dropss . ($"") . uriAuthToString id . uriAuthority
-    where
-        -- Old-style authority component does not include leading '//'
-        dropss ('/':'/':s) = s
-        dropss s           = s
-
-{-# DEPRECATED path "use uriPath" #-}
-path :: URI -> String
-path = uriPath
-
-{-# DEPRECATED query "use uriQuery, and note changed functionality" #-}
-query :: URI -> String
-query = orNull tail . uriQuery
-
-{-# DEPRECATED fragment "use uriFragment, and note changed functionality" #-}
-fragment :: URI -> String
-fragment = orNull tail . uriFragment
-
-orNull :: ([a]->[a]) -> [a] -> [a]
-orNull _ [] = []
-orNull f as = f as
 
 --------------------------------------------------------------------------------
 --
