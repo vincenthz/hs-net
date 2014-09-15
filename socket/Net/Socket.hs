@@ -30,6 +30,11 @@ import Foreign.Ptr (Ptr)
 -- > ssize_t recvfrom(int socket, void *restrict buffer, size_t length, int flags, struct sockaddr *restrict address, socklen_t *restrict address_len);
 -- > ssize_t recvmsg(int socket, struct msghdr *message, int flags);
 --
+-- > int getpeername(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
+-- > int getsockname(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
+-- > int getsockopt(int socket, int level, int option_name, void *restrict option_value, socklen_t *restrict option_len);
+-- > int setsockopt(int socket, int level, int option_name, const void *option_value, socklen_t option_len);
+--
 
 foreign import ccall unsafe "socket"
     c_socket :: CInt -> CInt -> CInt -> IO CInt
@@ -53,6 +58,15 @@ foreign import ccall unsafe "recvmsg"
     c_recvmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
 foreign import ccall unsafe "recvfrom"
     c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
+foreign import ccall unsafe "getpeername"
+    c_getpeername :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
+foreign import ccall unsafe "getsockname"
+    c_getsockname :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
+foreign import ccall unsafe "getsockopt"
+    c_getsockopt :: CInt -> CInt -> CInt -> Ptr () -> Ptr CSockLen -> IO CInt
+foreign import ccall unsafe "setsockopt"
+    c_setsockopt :: CInt -> CInt -> CInt -> Ptr () -> CSockLen -> IO CInt
+
 
 -- FIXME types
 data CSockAddr
