@@ -1,74 +1,62 @@
 -- |
--- Module      : Data.Git
+-- Module      : Net.Socket
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
 -- Stability   : experimental
 -- Portability : unix
 --
-{-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Net.Socket
-    (
+    ( SockAddr
     ) where
 
+import Control.Applicative
 import Data.Word
-import Foreign.C.Types
-import Foreign.Ptr (Ptr)
+import Net.Types
+import Net.Socket.System
 
--- C socket api
--- > int socket(int domain, int type, int protocol);
--- > int bind(int socket, const struct sockaddr *address, socklen_t address_len);
--- > int listen(int socket, int backlog);
--- > int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
--- > int connect(int socket, const struct sockaddr *address, socklen_t address_len);
---
--- > ssize_t send(int socket, const void *buffer, size_t length, int flags);
--- > ssize_t sendmsg(int socket, const struct msghdr *message, int flags);
--- > ssize_t sendto(int socket, const void *buffer, size_t length, int flags, const struct sockaddr *dest_addr, socklen_t dest_len);
---
--- > ssize_t recv(int socket, void *buffer, size_t length, int flags);
--- > ssize_t recvfrom(int socket, void *restrict buffer, size_t length, int flags, struct sockaddr *restrict address, socklen_t *restrict address_len);
--- > ssize_t recvmsg(int socket, struct msghdr *message, int flags);
---
--- > int getpeername(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
--- > int getsockname(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
--- > int getsockopt(int socket, int level, int option_name, void *restrict option_value, socklen_t *restrict option_len);
--- > int setsockopt(int socket, int level, int option_name, const void *option_value, socklen_t option_len);
---
+newtype Port = Port Word16
+    deriving (Show,Eq,Ord)
 
-foreign import ccall unsafe "socket"
-    c_socket :: CInt -> CInt -> CInt -> IO CInt
-foreign import ccall unsafe "bind"
-    c_bind :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
-foreign import ccall unsafe "listen"
-    c_listen :: CInt -> CInt -> IO CInt
-foreign import ccall unsafe "accept"
-    c_accept :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
-foreign import ccall unsafe "connect"
-    c_connect :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
-foreign import ccall unsafe "send"
-    c_send :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
-foreign import ccall unsafe "sendmsg"
-    c_sendmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
-foreign import ccall unsafe "sendto"
-    c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
-foreign import ccall unsafe "recv"
-    c_recv :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
-foreign import ccall unsafe "recvmsg"
-    c_recvmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
-foreign import ccall unsafe "recvfrom"
-    c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
-foreign import ccall unsafe "getpeername"
-    c_getpeername :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
-foreign import ccall unsafe "getsockname"
-    c_getsockname :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
-foreign import ccall unsafe "getsockopt"
-    c_getsockopt :: CInt -> CInt -> CInt -> Ptr () -> Ptr CSockLen -> IO CInt
-foreign import ccall unsafe "setsockopt"
-    c_setsockopt :: CInt -> CInt -> CInt -> Ptr () -> CSockLen -> IO CInt
+data InetAddr = IPv4 IPv4Addr | IPv6 IPv6Addr
+data SockAddrInet = SockAddrInet InetAddr Port
 
+instance SockAddr SockAddrInet where
+    sockAddrToData   = undefined
+    sockAddrFromData = undefined
+    sockAddrToParams = undefined
+{- len family port addr (0 [8]) -}
 
--- FIXME types
-data CSockAddr
-data CMsgHdr
-newtype CSockLen = CSockLen CInt
+{-
+instance SockAddr UnixAddr where
+    sockAddrToData   = undefined
+    sockAddrFromData = undefined
+    sockAddrToParams = undefined
+-}
+
+-- | Create a connected socket
+connect :: SockAddr addr
+        => addr
+        -> IO Socket
+connect addr = do
+    sock <- socketCreate (sockAddrToParams addr)
+    socketConnect
+
+{-
+connect TCP (SockAddrInet (ipv4 (10,20,30,40)) 80)
+connect TCP (Unix "/")
+-}
+
+{-
+connect (TCP $ ipv4 (10,20,30,40))
+connect (UDP $ ipv6 (0x2901,0x0,0x1,0x2,0x3,0x4,0x5,0x6))
+connect (Unix "/unix/path")
+-}
+
+-- | Create a listening socket
+listen :: SockAddr addr => addr -> Int -> IO Socket
+listen addr backlog = do
+    sock <- socketCreate (sockAddrToParams addr)
+    socketBind sock
+    socketListen sock
