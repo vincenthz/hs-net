@@ -26,6 +26,7 @@ Test-Suite test-uri
   Main-is:           Tests.hs
   Build-Depends:     base >= 3 && < 5
                    , mtl
+                   , net-uri
                    , QuickCheck >= 2
                    , HUnit
                    , test-framework
