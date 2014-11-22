@@ -14,6 +14,7 @@ module Net.Socket
 import Control.Applicative
 import Data.Word
 import Net.Types
+import Net.Socket.Address
 import Net.Socket.System
 
 newtype Port = Port Word16
@@ -38,10 +39,12 @@ instance SockAddr UnixAddr where
 -- | Create a connected socket
 connect :: SockAddr addr
         => addr
+        -> SocketType
         -> IO Socket
-connect addr = do
-    sock <- socketCreate (sockAddrToParams addr)
-    socketConnect
+connect addr socketTy = do
+    sock <- socketCreate (sockAddrToParams addr) socketTy 0
+    socketConnect sock addr
+    return sock
 
 {-
 connect TCP (SockAddrInet (ipv4 (10,20,30,40)) 80)
@@ -54,9 +57,13 @@ connect (UDP $ ipv6 (0x2901,0x0,0x1,0x2,0x3,0x4,0x5,0x6))
 connect (Unix "/unix/path")
 -}
 
+marshalAddr :: SockAddr addr => addr -> SocketAddrRaw
+marshalAddr = undefined
+
 -- | Create a listening socket
-listen :: SockAddr addr => addr -> Int -> IO Socket
-listen addr backlog = do
-    sock <- socketCreate (sockAddrToParams addr)
-    socketBind sock
-    socketListen sock
+listen :: SockAddr addr => addr -> SocketType -> Int -> IO Socket
+listen addr socketTy backlog = do
+    sock <- socketCreate (sockAddrToParams addr) socketTy 0
+    socketBind sock (marshalAddr addr)
+    socketListen sock backlog
+    return sock

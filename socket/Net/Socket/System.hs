@@ -6,6 +6,8 @@
 -- Portability : unix
 --
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Net.Socket.System
     ( socketCreate
     , socketConnect
@@ -13,36 +15,84 @@ module Net.Socket.System
     , socketListen
     , socketAccept
     , SocketType
+    , socketTypeStream
+    , socketTypeDatagram
+    , socketTypeRaw
+    -- * Raw socket type
     , Socket
+    , SocketAddrRaw(..)
     ) where
 
 import Control.Applicative
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Internal as B
 import Data.Word
 import Foreign.C.Types
-import Foreign.Ptr (Ptr)
+import Foreign.Storable
+import Foreign.Ptr (Ptr, castPtr, plusPtr)
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Marshal.Alloc
 import Net.Socket.Address
 
-newtype SocketType = SocketType Int -- FIXME, AF_INET6, 
-data Socket = Socket Int
+newtype SocketType = SocketType Int -- FIXME, AF_INET6, ?
+
+newtype Socket = Socket CInt
+
+newtype SocketAddrRaw = SocketAddrRaw ByteString
+
+socketTypeStream :: SocketType
+socketTypeStream = SocketType 1
+
+socketTypeDatagram :: SocketType
+socketTypeDatagram = SocketType 2
+
+socketTypeRaw :: SocketType
+socketTypeRaw = SocketType 3
 
 -- | create an unconnected socket
 socketCreate :: SocketFamily
              -> SocketType
+             -> Int
              -> IO Socket
 socketCreate (SocketFamily domain) (SocketType ty) protocol = do
-    c_socket domain ty protocol
+    onError "socketCreate" Socket =<< c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol)
 
-socketConnect :: SockAddr sockaddr
+socketConnect :: SockAddr sockAddr
               => Socket
               -> sockAddr
               -> IO ()
 socketConnect socket sockaddr =
     undefined
 
-socketBind = undefined
-socketListen = undefined
+socketBind :: Socket -> SocketAddrRaw -> IO ()
+socketBind (Socket socket) addrRaw = do
+    onError "socketBind" (const ()) =<< withSocketAddrRaw addrRaw (\ptr len -> c_bind socket ptr len)
 
-socketAccept = undefined
+socketListen :: Socket -> Int -> IO ()
+socketListen (Socket socket) backlog = do
+    onError "socketListen" (const ()) =<< c_listen socket (fromIntegral backlog)
+
+socketAccept :: Socket -> Int -> IO (Socket, SocketAddrRaw)
+socketAccept (Socket socket) bufferSz = do
+    fptr <- B.mallocByteString bufferSz
+    (newSock, CSockLen len) <- alloca $ \ptrSockLen -> do
+                poke ptrSockLen (CSockLen $ fromIntegral bufferSz)
+                accepted <- withForeignPtr fptr $ \ptr ->
+                                onError "socketAccept" Socket =<< c_accept socket (castPtr ptr) ptrSockLen
+                sockLen <- peek ptrSockLen
+                return (accepted, sockLen)
+                
+    return (newSock, SocketAddrRaw $! B.PS fptr 0 (fromIntegral len))
+
+onError :: String -> (CInt -> a) -> CInt -> IO a
+onError fctName mapper v
+    | v == -1   = error "this is a temporary error, it should raise something linked to errno or better a specific exception"
+    | otherwise = return $ mapper v
+
+withSocketAddrRaw :: SocketAddrRaw -> (Ptr CSockAddr -> CSockLen -> IO a) -> IO a
+withSocketAddrRaw (SocketAddrRaw bs) f =
+    withForeignPtr fptr $ \ptr -> f (castPtr (ptr `plusPtr` ofs)) (CSockLen $ fromIntegral len)
+  where (fptr, ofs, len) = B.toForeignPtr bs
 
 -- C socket api
 -- > int socket(int domain, int type, int protocol);
@@ -99,4 +149,6 @@ foreign import ccall unsafe "setsockopt"
 -- FIXME types
 data CSockAddr
 data CMsgHdr
+
 newtype CSockLen = CSockLen CInt
+    deriving (Storable)
