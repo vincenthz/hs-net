@@ -9,6 +9,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Net.Socket
     ( SockAddr
+    , connect
+    , listen
     ) where
 
 import Control.Applicative
@@ -43,7 +45,7 @@ connect :: SockAddr addr
         -> IO Socket
 connect addr socketTy = do
     sock <- socketCreate (sockAddrToParams addr) socketTy 0
-    socketConnect sock addr
+    socketConnect sock (marshalAddr addr)
     return sock
 
 {-
@@ -57,9 +59,6 @@ connect (UDP $ ipv6 (0x2901,0x0,0x1,0x2,0x3,0x4,0x5,0x6))
 connect (Unix "/unix/path")
 -}
 
-marshalAddr :: SockAddr addr => addr -> SocketAddrRaw
-marshalAddr = undefined
-
 -- | Create a listening socket
 listen :: SockAddr addr => addr -> SocketType -> Int -> IO Socket
 listen addr socketTy backlog = do
@@ -67,3 +66,6 @@ listen addr socketTy backlog = do
     socketBind sock (marshalAddr addr)
     socketListen sock backlog
     return sock
+
+marshalAddr :: SockAddr addr => addr -> SocketAddrRaw
+marshalAddr = undefined
