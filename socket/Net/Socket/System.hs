@@ -18,6 +18,7 @@ module Net.Socket.System
     , socketRecv
     , socketRecvFrom
     , socketSend
+    , socketSendTo
     , SocketType
     , socketTypeStream
     , socketTypeDatagram
@@ -150,6 +151,7 @@ socketRecv (Socket socket) len (SocketMsgFlags flags) =
         ret <- c_recv socket ptr (fromIntegral len) flags
         onErrorSz "socketRecv" fromIntegral $ ret
 
+-- | Similar to 'socketRecv' but also returns the socket address associated with the data.
 socketRecvFrom :: Socket -> Int -> SocketMsgFlags -> IO (ByteString, SocketAddrRaw)
 socketRecvFrom (Socket socket) len (SocketMsgFlags flags) = do
     let sAddrSz = 256 -- FIXME
@@ -172,6 +174,16 @@ socketSend (Socket socket) bs (SocketMsgFlags flags) =
         ret <- c_send socket (ptr `plusPtr` ofs) (fromIntegral len) flags
         onErrorSz "socketSend" fromIntegral $ ret
   where (fptr, ofs, len) = B.toForeignPtr bs
+
+-- | Similar to 'socketSend' but instead of using the socket connected destination,
+-- it used an explicitely given socket address.
+socketSendTo :: Socket -> ByteString -> SocketMsgFlags -> SocketAddrRaw -> IO Int
+socketSendTo (Socket socket) dat (SocketMsgFlags flags) addrRaw =
+    withSocketAddrRaw addrRaw $ \sAddrPtr sAddrLen ->
+    withForeignPtr sData $ \dataPtr -> do
+        ret <- c_sendto socket (dataPtr `plusPtr` dataOfs) (fromIntegral dataLen) flags sAddrPtr sAddrLen
+        onErrorSz "socketRecvFrom" fromIntegral $ ret
+  where (sData, dataOfs, dataLen) = B.toForeignPtr dat
 
 throwSocketErrno :: String -> IO a
 throwSocketErrno fctName = do
@@ -242,9 +254,9 @@ foreign import ccall unsafe "send"
 {-
 foreign import ccall unsafe "sendmsg"
     c_sendmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
+-}
 foreign import ccall unsafe "sendto"
     c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
--}
 foreign import ccall unsafe "recv"
     c_recv :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
 {-
