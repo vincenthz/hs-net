@@ -15,6 +15,8 @@ module Net.Socket.System
     , socketBind
     , socketListen
     , socketAccept
+    , socketRecv
+    , socketSend
     , SocketType
     , socketTypeStream
     , socketTypeDatagram
@@ -22,12 +24,18 @@ module Net.Socket.System
     -- * Raw socket type
     , Socket
     , SocketAddrRaw(..)
+    , SocketMsgFlags(..)
+    , socketMsgOOB
+    , socketMsgPeek
+    , socketMsgDontRoute
+    , socketMsgWaitAll
     ) where
 
-import Control.Applicative
 import Control.Exception
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as B
+import Data.Monoid
 import Data.Word
 import Data.Typeable
 import Foreign.C.Error
@@ -105,15 +113,52 @@ socketAccept (Socket socket) bufferSz = do
                                 onError "socketAccept" Socket =<< c_accept socket (castPtr ptr) ptrSockLen
                 sockLen <- peek ptrSockLen
                 return (accepted, sockLen)
-                
+
     return (newSock, SocketAddrRaw $! B.PS fptr 0 (fromIntegral len))
 
-onError :: String -> (CInt -> a) -> CInt -> IO a
-onError fctName mapper v
-    | v == -1   = do errno <- getErrno
-                     let err = errnoToSocketError errno
-                     error ("this is a temporary error, it should raise something linked to errno or better a specific exception: " ++ show err)
-    | otherwise = return $ mapper v
+data SocketMsgFlags = SocketMsgFlags CInt
+
+instance Monoid SocketMsgFlags where
+    mempty = SocketMsgFlags 0
+    mappend (SocketMsgFlags f1) (SocketMsgFlags f2) =
+        SocketMsgFlags (f1 .|. f2)
+
+-- could be bogus values related to certain system.
+socketMsgOOB :: SocketMsgFlags
+socketMsgOOB = SocketMsgFlags 0x1
+
+socketMsgPeek :: SocketMsgFlags
+socketMsgPeek = SocketMsgFlags 0x2
+
+socketMsgDontRoute :: SocketMsgFlags
+socketMsgDontRoute = SocketMsgFlags 0x4
+
+socketMsgWaitAll :: SocketMsgFlags
+socketMsgWaitAll = SocketMsgFlags 0x40
+
+-- | Try to get up to @len size data from a socket.
+--
+-- The call returned as soon as some data is available,
+-- the bytestring is allocated to be of maximum size, but
+-- is trimmed on partial filled (however the memory is not re-allocated).
+socketRecv :: Socket -> Int -> SocketMsgFlags -> IO ByteString
+socketRecv (Socket socket) len (SocketMsgFlags flags) =
+    B.createAndTrim len $ \ptr -> do
+        ret <- c_recv socket ptr (fromIntegral len) flags
+        onErrorSz "socketRecv" fromIntegral $ ret
+
+socketSend :: Socket -> ByteString -> SocketMsgFlags -> IO Int
+socketSend (Socket socket) bs (SocketMsgFlags flags) =
+    withForeignPtr fptr $ \ptr -> do
+        ret <- c_send socket (ptr `plusPtr` ofs) (fromIntegral len) flags
+        onErrorSz "socketSend" fromIntegral $ ret
+  where (fptr, ofs, len) = B.toForeignPtr bs
+
+throwSocketErrno :: String -> IO a
+throwSocketErrno fctName = do
+    errno <- getErrno
+    let err = errnoToSocketError errno
+    error ("this is a temporary error, it should raise something linked to errno or better a specific exception: " ++ fctName ++ " : " ++ show err)
   where errnoToSocketError errno@(Errno errnoVal)
             | errno == eADDRINUSE      = SocketError_AddressInUse
             | errno == eADDRNOTAVAIL   = SocketError_AddressNotAvailable
@@ -126,6 +171,16 @@ onError fctName mapper v
             | errno == eNETUNREACH     = SocketError_NetworkFailure
             | errno == eNOTSOCK        = SocketError_InvalidDescriptor
             | otherwise                = SocketError_System errnoVal
+
+onError :: String -> (CInt -> a) -> CInt -> IO a
+onError fctName mapper v
+    | v == -1   = throwSocketErrno fctName
+    | otherwise = return $ mapper v
+
+onErrorSz :: String -> (CSize -> a) -> CSize -> IO a
+onErrorSz fctName mapper v
+    | v == -1   = throwSocketErrno fctName
+    | otherwise = return $ mapper v
 
 withSocketAddrRaw :: SocketAddrRaw -> (Ptr CSockAddr -> CSockLen -> IO a) -> IO a
 withSocketAddrRaw (SocketAddrRaw bs) f =
@@ -165,12 +220,15 @@ foreign import ccall unsafe "connect"
     c_connect :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
 foreign import ccall unsafe "send"
     c_send :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
+{-
 foreign import ccall unsafe "sendmsg"
     c_sendmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
 foreign import ccall unsafe "sendto"
     c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
+-}
 foreign import ccall unsafe "recv"
     c_recv :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
+{-
 foreign import ccall unsafe "recvmsg"
     c_recvmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
 foreign import ccall unsafe "recvfrom"
@@ -183,10 +241,11 @@ foreign import ccall unsafe "getsockopt"
     c_getsockopt :: CInt -> CInt -> CInt -> Ptr () -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "setsockopt"
     c_setsockopt :: CInt -> CInt -> CInt -> Ptr () -> CSockLen -> IO CInt
+-}
 
 -- FIXME types
 data CSockAddr
-data CMsgHdr
+--data CMsgHdr
 
 newtype CSockLen = CSockLen CInt
     deriving (Storable)
