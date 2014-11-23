@@ -35,7 +35,6 @@ module Net.Socket.System
     ) where
 
 import Control.Exception
-import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as B
 import Data.Monoid
@@ -48,6 +47,7 @@ import Foreign.Ptr (Ptr, castPtr, plusPtr)
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Alloc
 import Net.Socket.Address
+import Net.Socket.System.Internal
 
 -- exceptions
 
@@ -116,13 +116,6 @@ socketAccept (Socket socket) sAddrSz = do
             onError "socketAccept" Socket =<< c_accept socket (castPtr sAddrPtr) sAddrLenPtr
         (CSockLen sockLen) <- peek sAddrLenPtr
         return (accepted, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
-
-data SocketMsgFlags = SocketMsgFlags CInt
-
-instance Monoid SocketMsgFlags where
-    mempty = SocketMsgFlags 0
-    mappend (SocketMsgFlags f1) (SocketMsgFlags f2) =
-        SocketMsgFlags (f1 .|. f2)
 
 socketMsgNormal :: SocketMsgFlags
 socketMsgNormal = mempty
@@ -279,6 +272,3 @@ foreign import ccall unsafe "setsockopt"
 -- FIXME types
 data CSockAddr
 --data CMsgHdr
-
-newtype CSockLen = CSockLen CInt
-    deriving (Storable)

@@ -18,6 +18,7 @@ Library
   Exposed-modules:   Net.Socket
                    , Net.Socket.Address
                    , Net.Socket.System
+  Other-modules:     Net.Socket.System.Internal
   Build-depends:     base >= 4 && < 5
                    , bytestring
                    , net-types
