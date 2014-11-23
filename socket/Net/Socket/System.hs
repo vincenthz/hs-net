@@ -8,6 +8,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Net.Socket.System
     ( socketCreate
     , socketConnect
@@ -24,15 +25,33 @@ module Net.Socket.System
     ) where
 
 import Control.Applicative
+import Control.Exception
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as B
 import Data.Word
+import Data.Typeable
+import Foreign.C.Error
 import Foreign.C.Types
 import Foreign.Storable
 import Foreign.Ptr (Ptr, castPtr, plusPtr)
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Alloc
 import Net.Socket.Address
+
+-- exceptions
+
+data SocketError =
+      SocketError_ConnectionRefused
+    | SocketError_ConnectionReset
+    | SocketError_AddressInUse
+    | SocketError_AddressNotAvailable
+    | SocketError_AddressCannotBeUseWithSocketType
+    | SocketError_InvalidDescriptor
+    | SocketError_NetworkFailure
+    | SocketError_System CInt
+    deriving (Show,Eq,Typeable)
+
+instance Exception SocketError
 
 newtype SocketType = SocketType Int -- FIXME, AF_INET6, ?
 
@@ -57,21 +76,26 @@ socketCreate :: SocketFamily
 socketCreate (SocketFamily domain) (SocketType ty) protocol = do
     onError "socketCreate" Socket =<< c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol)
 
-socketConnect :: SockAddr sockAddr
-              => Socket
-              -> sockAddr
+-- | Initiate a connection to an adress on a socket
+socketConnect :: Socket
+              -> SocketAddrRaw
               -> IO ()
-socketConnect socket sockaddr =
-    undefined
+socketConnect (Socket socket) addrRaw =
+    onError "socketConnect" (const ()) =<< withSocketAddrRaw addrRaw (\ptr len -> c_connect socket ptr len)
 
+-- | Bind a name to a socket
 socketBind :: Socket -> SocketAddrRaw -> IO ()
 socketBind (Socket socket) addrRaw = do
     onError "socketBind" (const ()) =<< withSocketAddrRaw addrRaw (\ptr len -> c_bind socket ptr len)
 
+-- | Make the system listen for connection on a socket
 socketListen :: Socket -> Int -> IO ()
 socketListen (Socket socket) backlog = do
     onError "socketListen" (const ()) =<< c_listen socket (fromIntegral backlog)
 
+-- | Accept a connection on a listening socket
+--
+-- On success the new socket is returned along with the address of the connecting entity
 socketAccept :: Socket -> Int -> IO (Socket, SocketAddrRaw)
 socketAccept (Socket socket) bufferSz = do
     fptr <- B.mallocByteString bufferSz
@@ -86,8 +110,22 @@ socketAccept (Socket socket) bufferSz = do
 
 onError :: String -> (CInt -> a) -> CInt -> IO a
 onError fctName mapper v
-    | v == -1   = error "this is a temporary error, it should raise something linked to errno or better a specific exception"
+    | v == -1   = do errno <- getErrno
+                     let err = errnoToSocketError errno
+                     error ("this is a temporary error, it should raise something linked to errno or better a specific exception: " ++ show err)
     | otherwise = return $ mapper v
+  where errnoToSocketError errno@(Errno errnoVal)
+            | errno == eADDRINUSE      = SocketError_AddressInUse
+            | errno == eADDRNOTAVAIL   = SocketError_AddressNotAvailable
+            | errno == eAFNOSUPPORT    = SocketError_AddressCannotBeUseWithSocketType
+            | errno == eBADF           = SocketError_InvalidDescriptor
+            | errno == eCONNREFUSED    = SocketError_ConnectionRefused
+            | errno == eCONNRESET      = SocketError_ConnectionReset
+            | errno == eNETDOWN        = SocketError_NetworkFailure
+            | errno == eNETRESET       = SocketError_NetworkFailure
+            | errno == eNETUNREACH     = SocketError_NetworkFailure
+            | errno == eNOTSOCK        = SocketError_InvalidDescriptor
+            | otherwise                = SocketError_System errnoVal
 
 withSocketAddrRaw :: SocketAddrRaw -> (Ptr CSockAddr -> CSockLen -> IO a) -> IO a
 withSocketAddrRaw (SocketAddrRaw bs) f =
