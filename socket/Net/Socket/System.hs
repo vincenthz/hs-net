@@ -16,6 +16,7 @@ module Net.Socket.System
     , socketListen
     , socketAccept
     , socketRecv
+    , socketRecvFrom
     , socketSend
     , SocketType
     , socketTypeStream
@@ -106,16 +107,14 @@ socketListen (Socket socket) backlog = do
 --
 -- On success the new socket is returned along with the address of the connecting entity
 socketAccept :: Socket -> Int -> IO (Socket, SocketAddrRaw)
-socketAccept (Socket socket) bufferSz = do
-    fptr <- B.mallocByteString bufferSz
-    (newSock, CSockLen len) <- alloca $ \ptrSockLen -> do
-                poke ptrSockLen (CSockLen $ fromIntegral bufferSz)
-                accepted <- withForeignPtr fptr $ \ptr ->
-                                onError "socketAccept" Socket =<< c_accept socket (castPtr ptr) ptrSockLen
-                sockLen <- peek ptrSockLen
-                return (accepted, sockLen)
-
-    return (newSock, SocketAddrRaw $! B.PS fptr 0 (fromIntegral len))
+socketAccept (Socket socket) sAddrSz = do
+    sAddr <- B.mallocByteString sAddrSz
+    alloca $ \sAddrLenPtr -> do
+        poke sAddrLenPtr (CSockLen $ fromIntegral sAddrSz)
+        accepted <- withForeignPtr sAddr $ \sAddrPtr ->
+            onError "socketAccept" Socket =<< c_accept socket (castPtr sAddrPtr) sAddrLenPtr
+        (CSockLen sockLen) <- peek sAddrLenPtr
+        return (accepted, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
 
 data SocketMsgFlags = SocketMsgFlags CInt
 
@@ -151,6 +150,22 @@ socketRecv (Socket socket) len (SocketMsgFlags flags) =
         ret <- c_recv socket ptr (fromIntegral len) flags
         onErrorSz "socketRecv" fromIntegral $ ret
 
+socketRecvFrom :: Socket -> Int -> SocketMsgFlags -> IO (ByteString, SocketAddrRaw)
+socketRecvFrom (Socket socket) len (SocketMsgFlags flags) = do
+    let sAddrSz = 256 -- FIXME
+    sAddr <- B.mallocByteString sAddrSz
+    alloca $ \sAddrLenPtr -> do
+        poke sAddrLenPtr (CSockLen $ fromIntegral sAddrSz)
+        bs <- B.createAndTrim len $ \dataPtr ->
+            withForeignPtr sAddr $ \sAddrPtr -> do
+                ret <- c_recvfrom socket dataPtr (fromIntegral len) flags (castPtr sAddrPtr) (castPtr sAddrLenPtr)
+                onErrorSz "socketRecvFrom" fromIntegral $ ret
+        (CSockLen sockLen) <- peek sAddrLenPtr
+        return (bs, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
+
+-- | Try to send some data into a socket
+--
+-- It returns the number of bytes consumed.
 socketSend :: Socket -> ByteString -> SocketMsgFlags -> IO Int
 socketSend (Socket socket) bs (SocketMsgFlags flags) =
     withForeignPtr fptr $ \ptr -> do
@@ -235,8 +250,10 @@ foreign import ccall unsafe "recv"
 {-
 foreign import ccall unsafe "recvmsg"
     c_recvmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
+-}
 foreign import ccall unsafe "recvfrom"
-    c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
+    c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CSize
+{-
 foreign import ccall unsafe "getpeername"
     c_getpeername :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "getsockname"
