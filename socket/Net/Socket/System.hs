@@ -25,6 +25,7 @@ module Net.Socket.System
     , Socket
     , SocketAddrRaw(..)
     , SocketMsgFlags(..)
+    , socketMsgNormal
     , socketMsgOOB
     , socketMsgPeek
     , socketMsgDontRoute
@@ -122,6 +123,9 @@ instance Monoid SocketMsgFlags where
     mempty = SocketMsgFlags 0
     mappend (SocketMsgFlags f1) (SocketMsgFlags f2) =
         SocketMsgFlags (f1 .|. f2)
+
+socketMsgNormal :: SocketMsgFlags
+socketMsgNormal = mempty
 
 -- could be bogus values related to certain system.
 socketMsgOOB :: SocketMsgFlags
