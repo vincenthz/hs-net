@@ -13,7 +13,6 @@ module Net.Socket
     , listen
     ) where
 
-import Control.Applicative
 import Data.Word
 import Net.Types
 import Net.Socket.Address
