@@ -9,21 +9,9 @@ import Test.QuickCheck
 
 import Net.URI
 
-printURI :: URI -> String
-printURI uri =
-    "URI\n"
-      ++ "  scheme:   " ++ (show $ uriScheme uri) ++ "\n"
-      ++ "  auth:     " ++ (show $ uriAuthority uri) ++ "\n"
-      ++ "  path:     " ++ (show $ uriPath uri) ++ "\n"
-      ++ "  query:    " ++ (show $ uriQuery uri) ++ "\n"
-      ++ "  fragment: " ++ (show $ uriFragment uri) ++ "\n"
-
 newtype ArbitraryURI = ArbitraryURI
     { getURI :: URI
-    } deriving (Eq)
-
-instance Show ArbitraryURI where
-    show (ArbitraryURI uri) = "ArbitraryURI: " ++ printURI uri
+    } deriving (Eq, Show)
 
 instance Arbitrary ArbitraryURI where
     arbitrary = ArbitraryURI <$> generateURI
@@ -39,18 +27,22 @@ generateURI =
 generateURIAuth :: Gen URIAuth
 generateURIAuth =
     URIAuth <$> generateUserInfo
-            <*> generateRegName
-            <*> generatePort
+            <*> generateHostName
 
-generateUserInfo :: Gen String
+generateHostName :: Gen HostName
+generateHostName =
+    HostName <$> generateRegName
+             <*> oneof [ return Nothing, Just <$> choose (0, 9095) ]
+
+generateUserInfo :: Gen UserInfo
 generateUserInfo =
-    elements [ ""
-             , "@"
-             , "user@"
-             , "user:@"
-             , "user:...@"
-             , "user:...@"
-             ]
+    UserInfo
+        <$> elements [ ""
+                     , "user"
+                     , "user:"
+                     , "user:..."
+                     , "user:..."
+                     ]
 
 generateRegName :: Gen String
 generateRegName = do
@@ -60,32 +52,31 @@ generateRegName = do
     root <- vectorOf sizeRoot $ choose ('a', 'z')
     return $ intercalate "" (lNodes ++ [root])
 
-generatePort :: Gen String
-generatePort =
-    frequency [ (75, (\n -> ':' : (show n)) <$> (choose (0, 8080) :: Gen Int))
-              , (25, return "" )]
+generateScheme :: Gen URIScheme
+generateScheme =
+    URIScheme
+        <$> elements [ "http", "https", "ftp", "ssh", "ftps" ]
 
-
-generateScheme :: Gen String
-generateScheme = elements [ "http:", "https:", "ftp:", "ssh:", "ftps:" ]
-
-generatePath :: Gen String
+generatePath :: Gen URIPath
 generatePath = do
-    numNodes <- choose (0, 3)
+    numNodes <- choose (1, 4)
     lNodes <- vectorOf numNodes $ listOf1 $ oneof [ choose ('a', 'z'), choose ('0', '9')]
     sizeRoot <- choose (2, 5)
     root <- vectorOf sizeRoot $ choose ('a', 'z')
-    return $ '/' : (intercalate "/" (lNodes ++ [root]))
+    return $ URIPath $ if numNodes == 0
+        then ""
+        else '/' : (intercalate "/" (lNodes ++ [root]))
 
-generateQuery :: Gen String
+generateQuery :: Gen URIQuery
 generateQuery = do
     numQueries <- choose (0, 2)
     lQueries <- vectorOf numQueries $ listOf1 $ oneof [ choose ('a', 'z'), choose ('0', '9'), return '=']
-    return $ '?' : (intercalate "&" lQueries)
+    return $ URIQuery $ if numQueries == 0
+        then ""
+        else intercalate "&" lQueries
 
-generateFragment :: Gen String
+generateFragment :: Gen URIFragment
 generateFragment = do
     sizeFragment <- choose (0, 10)
     frag <- vectorOf sizeFragment $ oneof [ choose ('a', 'z'), choose ('0', '9')]
-    return $ '#' : frag
-
+    return $ URIFragment $ frag
