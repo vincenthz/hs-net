@@ -117,6 +117,17 @@ socketAccept (Socket socket) sAddrSz = do
         (CSockLen sockLen) <- peek sAddrLenPtr
         return (accepted, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
 
+data ShutdownCommand = Shutdown_Read | Shutdown_Write | Shutdown_ReadWrite
+    deriving (Show,Eq)
+
+socketShutdown :: Socket -> ShutdownCommand -> IO ()
+socketShutdown (Socket socket) command =
+    onError "socketShutdown" (const ()) =<< c_shutdown socket cVal
+  where cVal = case command of
+                   Shutdown_Read      -> 0
+                   Shutdown_Write     -> 1
+                   Shutdown_ReadWrite -> 2
+
 socketMsgNormal :: SocketMsgFlags
 socketMsgNormal = mempty
 
@@ -217,6 +228,7 @@ withSocketAddrRaw (SocketAddrRaw bs) f =
 -- > int listen(int socket, int backlog);
 -- > int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
 -- > int connect(int socket, const struct sockaddr *address, socklen_t address_len);
+-- > int shutdown(int socket, int how);
 --
 -- > ssize_t send(int socket, const void *buffer, size_t length, int flags);
 -- > ssize_t sendmsg(int socket, const struct msghdr *message, int flags);
@@ -242,6 +254,8 @@ foreign import ccall unsafe "accept"
     c_accept :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "connect"
     c_connect :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
+foreign import ccall unsafe "shutdown"
+    c_shutdown :: CInt -> CInt -> IO CInt
 foreign import ccall unsafe "send"
     c_send :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
 {-
