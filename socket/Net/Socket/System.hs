@@ -9,6 +9,7 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE BangPatterns #-}
 module Net.Socket.System
     ( socketCreate
     , socketConnect
@@ -20,6 +21,7 @@ module Net.Socket.System
     , socketRecvFrom
     , socketSend
     , socketSendTo
+    , socketSendVec
     , SocketType
     , socketTypeStream
     , socketTypeDatagram
@@ -44,9 +46,10 @@ import Data.Typeable
 import Foreign.C.Error
 import Foreign.C.Types
 import Foreign.Storable
-import Foreign.Ptr (Ptr, castPtr, plusPtr)
+import Foreign.Ptr (Ptr, castPtr, plusPtr, nullPtr)
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Alloc
+import Foreign.Marshal.Array
 import Net.Socket.Address
 import Net.Socket.System.Internal
 
@@ -208,6 +211,36 @@ socketSendTo (Socket socket) dat (SocketMsgFlags flags) addrRaw =
             c_sendto socket (dataPtr `plusPtr` dataOfs) (fromIntegral dataLen) flags sAddrPtr sAddrLen
   where (sData, dataOfs, dataLen) = B.toForeignPtr dat
 
+socketSendVec :: Socket -> [ByteString] -> SocketMsgFlags -> Maybe SocketAddrRaw -> IO Int
+socketSendVec (Socket socket) dats flags addrRaw =
+    withMsgHdr dats flags addrRaw $ \msgHdrPtr ->
+        checkRet "socketSend" fromIntegral $ do
+            threadWaitWrite (Fd socket)
+            c_sendmsg socket msgHdrPtr 0
+
+
+withMsgHdr :: [ByteString] -> SocketMsgFlags -> Maybe SocketAddrRaw -> (Ptr MsgHdr -> IO a) -> IO a
+withMsgHdr dats flags addrRaw f =
+    withOptionalBytes addrRaw $ \sAddrPtr sAddrLen ->
+    allocaArray nbVecs $ \iovecs -> do
+        mapM_ (toIOVec iovecs) $ zip [0..] dats
+        alloca $ \msgHdrPtr -> do
+            poke msgHdrPtr $ MsgHdr { msgHdrName     = sAddrPtr
+                                    , msgHdrNameLen  = fromIntegral sAddrLen
+                                    , msgHdrIovecs   = iovecs
+                                    , msgHdrIovecLen = fromIntegral nbVecs
+                                    , msgHdrFlags    = flags
+                                    }
+            f msgHdrPtr
+  where
+        !nbVecs = length dats
+        toIOVec arrayPtr (i,bs) = do
+            let (fptr, ofs, len) = B.toForeignPtr bs
+            withForeignPtr fptr $ \ptr -> poke cellPtr $ IOVec (ptr `plusPtr` ofs) (fromIntegral len)
+          where cellPtr = arrayPtr `plusPtr` (i * sizeOf (undefined :: IOVec))
+        withOptionalBytes Nothing                                    fin = fin nullPtr 0
+        withOptionalBytes (Just (SocketAddrRaw (B.PS fptr ofs len))) fin = withForeignPtr fptr $ \ptr -> fin (ptr `plusPtr` ofs) len
+
 errnoToSocketError :: Errno -> SocketError
 errnoToSocketError errno@(Errno errnoVal)
     | errno == eADDRINUSE      = SocketError_AddressInUse
@@ -273,17 +306,15 @@ foreign import ccall unsafe "shutdown"
     c_shutdown :: CInt -> CInt -> IO CInt
 foreign import ccall unsafe "send"
     c_send :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
-{-
 foreign import ccall unsafe "sendmsg"
-    c_sendmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
--}
+    c_sendmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSize
 foreign import ccall unsafe "sendto"
     c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
 foreign import ccall unsafe "recv"
     c_recv :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
 {-
 foreign import ccall unsafe "recvmsg"
-    c_recvmsg :: CInt -> Ptr CMsgHdr -> CInt -> IO CSize
+    c_recvmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSize
 -}
 foreign import ccall unsafe "recvfrom"
     c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CSize
@@ -300,4 +331,3 @@ foreign import ccall unsafe "setsockopt"
 
 -- FIXME types
 data CSockAddr
---data CMsgHdr
