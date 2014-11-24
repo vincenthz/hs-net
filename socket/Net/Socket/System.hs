@@ -52,6 +52,7 @@ import Net.Socket.System.Internal
 
 import GHC.Conc (threadWaitRead, threadWaitWrite)
 import System.Posix.Types
+import System.Posix.Internals (setNonBlockingFD)
 
 -- exceptions
 
@@ -88,8 +89,12 @@ socketCreate :: SocketFamily
              -> SocketType
              -> Int
              -> IO Socket
-socketCreate (SocketFamily domain) (SocketType ty) protocol = do
-    checkRet "socketCreate" Socket (c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol))
+socketCreate (SocketFamily domain) (SocketType ty) protocol =
+    checkRet "socketCreate" id (c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol)) >>= setupSocket
+  where setupSocket :: CInt -> IO Socket
+        setupSocket socket = do
+            setNonBlockingFD socket True
+            return $ Socket socket
 
 -- | Initiate a connection to an adress on a socket
 socketConnect :: Socket
@@ -97,7 +102,9 @@ socketConnect :: Socket
               -> IO ()
 socketConnect (Socket socket) addrRaw =
     withSocketAddrRaw addrRaw $ \ptr len ->
-        checkRet "socketConnect" (const ()) (threadWaitWrite (Fd socket) >> c_connect socket ptr len)
+        checkRet "socketConnect" (const ()) $ do
+            threadWaitWrite (Fd socket)
+            c_connect socket ptr len
 
 -- | Bind a name to a socket
 socketBind :: Socket -> SocketAddrRaw -> IO ()
