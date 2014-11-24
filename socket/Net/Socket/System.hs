@@ -15,6 +15,7 @@ module Net.Socket.System
     , socketBind
     , socketListen
     , socketAccept
+    , socketShutdown
     , socketRecv
     , socketRecvFrom
     , socketSend
@@ -48,6 +49,9 @@ import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Alloc
 import Net.Socket.Address
 import Net.Socket.System.Internal
+
+import GHC.Conc (threadWaitRead, threadWaitWrite)
+import System.Posix.Types
 
 -- exceptions
 
@@ -85,24 +89,26 @@ socketCreate :: SocketFamily
              -> Int
              -> IO Socket
 socketCreate (SocketFamily domain) (SocketType ty) protocol = do
-    onError "socketCreate" Socket =<< c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol)
+    checkRet "socketCreate" Socket (c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol))
 
 -- | Initiate a connection to an adress on a socket
 socketConnect :: Socket
               -> SocketAddrRaw
               -> IO ()
 socketConnect (Socket socket) addrRaw =
-    onError "socketConnect" (const ()) =<< withSocketAddrRaw addrRaw (\ptr len -> c_connect socket ptr len)
+    withSocketAddrRaw addrRaw $ \ptr len ->
+        checkRet "socketConnect" (const ()) (threadWaitWrite (Fd socket) >> c_connect socket ptr len)
 
 -- | Bind a name to a socket
 socketBind :: Socket -> SocketAddrRaw -> IO ()
-socketBind (Socket socket) addrRaw = do
-    onError "socketBind" (const ()) =<< withSocketAddrRaw addrRaw (\ptr len -> c_bind socket ptr len)
+socketBind (Socket socket) addrRaw =
+    withSocketAddrRaw addrRaw $ \ptr len -> do
+        checkRet "socketBind" (const ()) (c_bind socket ptr len)
 
 -- | Make the system listen for connection on a socket
 socketListen :: Socket -> Int -> IO ()
-socketListen (Socket socket) backlog = do
-    onError "socketListen" (const ()) =<< c_listen socket (fromIntegral backlog)
+socketListen (Socket socket) backlog =
+    checkRet "socketListen" (const ()) $ c_listen socket (fromIntegral backlog)
 
 -- | Accept a connection on a listening socket
 --
@@ -113,7 +119,9 @@ socketAccept (Socket socket) sAddrSz = do
     alloca $ \sAddrLenPtr -> do
         poke sAddrLenPtr (CSockLen $ fromIntegral sAddrSz)
         accepted <- withForeignPtr sAddr $ \sAddrPtr ->
-            onError "socketAccept" Socket =<< c_accept socket (castPtr sAddrPtr) sAddrLenPtr
+            checkRet "socketAccept" Socket $ do
+                threadWaitRead (Fd socket)
+                c_accept socket (castPtr sAddrPtr) sAddrLenPtr
         (CSockLen sockLen) <- peek sAddrLenPtr
         return (accepted, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
 
@@ -122,7 +130,7 @@ data ShutdownCommand = Shutdown_Read | Shutdown_Write | Shutdown_ReadWrite
 
 socketShutdown :: Socket -> ShutdownCommand -> IO ()
 socketShutdown (Socket socket) command =
-    onError "socketShutdown" (const ()) =<< c_shutdown socket cVal
+    checkRet "socketShutdown" (const ()) $ c_shutdown socket cVal
   where cVal = case command of
                    Shutdown_Read      -> 0
                    Shutdown_Write     -> 1
@@ -152,8 +160,9 @@ socketMsgWaitAll = SocketMsgFlags 0x40
 socketRecv :: Socket -> Int -> SocketMsgFlags -> IO ByteString
 socketRecv (Socket socket) len (SocketMsgFlags flags) =
     B.createAndTrim len $ \ptr -> do
-        ret <- c_recv socket ptr (fromIntegral len) flags
-        onErrorSz "socketRecv" fromIntegral $ ret
+        checkRet "socketRecv" fromIntegral $ do
+            threadWaitRead (Fd socket)
+            c_recv socket ptr (fromIntegral len) flags
 
 -- | Similar to 'socketRecv' but also returns the socket address associated with the data.
 socketRecvFrom :: Socket -> Int -> SocketMsgFlags -> IO (ByteString, SocketAddrRaw)
@@ -163,9 +172,10 @@ socketRecvFrom (Socket socket) len (SocketMsgFlags flags) = do
     alloca $ \sAddrLenPtr -> do
         poke sAddrLenPtr (CSockLen $ fromIntegral sAddrSz)
         bs <- B.createAndTrim len $ \dataPtr ->
-            withForeignPtr sAddr $ \sAddrPtr -> do
-                ret <- c_recvfrom socket dataPtr (fromIntegral len) flags (castPtr sAddrPtr) (castPtr sAddrLenPtr)
-                onErrorSz "socketRecvFrom" fromIntegral $ ret
+            withForeignPtr sAddr $ \sAddrPtr ->
+                checkRet "socketRecvFrom" fromIntegral $ do
+                    threadWaitRead (Fd socket)
+                    c_recvfrom socket dataPtr (fromIntegral len) flags (castPtr sAddrPtr) (castPtr sAddrLenPtr)
         (CSockLen sockLen) <- peek sAddrLenPtr
         return (bs, SocketAddrRaw $! B.PS sAddr 0 (fromIntegral sockLen))
 
@@ -174,9 +184,10 @@ socketRecvFrom (Socket socket) len (SocketMsgFlags flags) = do
 -- It returns the number of bytes consumed.
 socketSend :: Socket -> ByteString -> SocketMsgFlags -> IO Int
 socketSend (Socket socket) bs (SocketMsgFlags flags) =
-    withForeignPtr fptr $ \ptr -> do
-        ret <- c_send socket (ptr `plusPtr` ofs) (fromIntegral len) flags
-        onErrorSz "socketSend" fromIntegral $ ret
+    withForeignPtr fptr $ \ptr ->
+        checkRet "socketSend" fromIntegral $ do
+            threadWaitWrite (Fd socket)
+            c_send socket (ptr `plusPtr` ofs) (fromIntegral len) flags
   where (fptr, ofs, len) = B.toForeignPtr bs
 
 -- | Similar to 'socketSend' but instead of using the socket connected destination,
@@ -184,38 +195,35 @@ socketSend (Socket socket) bs (SocketMsgFlags flags) =
 socketSendTo :: Socket -> ByteString -> SocketMsgFlags -> SocketAddrRaw -> IO Int
 socketSendTo (Socket socket) dat (SocketMsgFlags flags) addrRaw =
     withSocketAddrRaw addrRaw $ \sAddrPtr sAddrLen ->
-    withForeignPtr sData $ \dataPtr -> do
-        ret <- c_sendto socket (dataPtr `plusPtr` dataOfs) (fromIntegral dataLen) flags sAddrPtr sAddrLen
-        onErrorSz "socketRecvFrom" fromIntegral $ ret
+    withForeignPtr sData $ \dataPtr ->
+        checkRet "socketRecvFrom" fromIntegral $ do
+            threadWaitRead (Fd socket)
+            c_sendto socket (dataPtr `plusPtr` dataOfs) (fromIntegral dataLen) flags sAddrPtr sAddrLen
   where (sData, dataOfs, dataLen) = B.toForeignPtr dat
 
-throwSocketErrno :: String -> IO a
-throwSocketErrno fctName = do
-    errno <- getErrno
-    let err = errnoToSocketError errno
-    error ("this is a temporary error, it should raise something linked to errno or better a specific exception: " ++ fctName ++ " : " ++ show err)
-  where errnoToSocketError errno@(Errno errnoVal)
-            | errno == eADDRINUSE      = SocketError_AddressInUse
-            | errno == eADDRNOTAVAIL   = SocketError_AddressNotAvailable
-            | errno == eAFNOSUPPORT    = SocketError_AddressCannotBeUseWithSocketType
-            | errno == eBADF           = SocketError_InvalidDescriptor
-            | errno == eCONNREFUSED    = SocketError_ConnectionRefused
-            | errno == eCONNRESET      = SocketError_ConnectionReset
-            | errno == eNETDOWN        = SocketError_NetworkFailure
-            | errno == eNETRESET       = SocketError_NetworkFailure
-            | errno == eNETUNREACH     = SocketError_NetworkFailure
-            | errno == eNOTSOCK        = SocketError_InvalidDescriptor
-            | otherwise                = SocketError_System errnoVal
+errnoToSocketError :: Errno -> SocketError
+errnoToSocketError errno@(Errno errnoVal)
+    | errno == eADDRINUSE      = SocketError_AddressInUse
+    | errno == eADDRNOTAVAIL   = SocketError_AddressNotAvailable
+    | errno == eAFNOSUPPORT    = SocketError_AddressCannotBeUseWithSocketType
+    | errno == eBADF           = SocketError_InvalidDescriptor
+    | errno == eCONNREFUSED    = SocketError_ConnectionRefused
+    | errno == eCONNRESET      = SocketError_ConnectionReset
+    | errno == eNETDOWN        = SocketError_NetworkFailure
+    | errno == eNETRESET       = SocketError_NetworkFailure
+    | errno == eNETUNREACH     = SocketError_NetworkFailure
+    | errno == eNOTSOCK        = SocketError_InvalidDescriptor
+    | otherwise                = SocketError_System errnoVal
 
-onError :: String -> (CInt -> a) -> CInt -> IO a
-onError fctName mapper v
-    | v == -1   = throwSocketErrno fctName
-    | otherwise = return $ mapper v
-
-onErrorSz :: String -> (CSize -> a) -> CSize -> IO a
-onErrorSz fctName mapper v
-    | v == -1   = throwSocketErrno fctName
-    | otherwise = return $ mapper v
+checkRet :: (Num ret, Eq ret) => String -> (ret -> a) -> IO ret -> IO a
+checkRet _fctName mapper action = do
+    r <- action
+    if r == -1
+        then do errno <- getErrno
+                if errno == eAGAIN || errno == eWOULDBLOCK
+                    then checkRet _fctName mapper action
+                    else throwIO $ errnoToSocketError errno
+        else return $ mapper r
 
 withSocketAddrRaw :: SocketAddrRaw -> (Ptr CSockAddr -> CSockLen -> IO a) -> IO a
 withSocketAddrRaw (SocketAddrRaw bs) f =
