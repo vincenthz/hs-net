@@ -12,13 +12,17 @@ module Net.Socket.Address
     -- * get
     , SockAddrReader
     , expect
+    , sockAddrReaderError
     , getSockAddrCommon
     , get8
+    , getN16
     , getN32
     -- * put
     , SockAddrWriter
+    , sockAddrWriterError
     , putSockAddrCommon
     , put8
+    , putN16
     , putN32
     ) where
 
@@ -31,7 +35,8 @@ import Foreign.Storable
 
 -- | A wrapper for the domain of the socket
 -- e.g. AF_INET, AF_INET6, 
-newtype SocketFamily = SocketFamily Int -- FIXME
+newtype SocketFamily = SocketFamily Word8 -- FIXME
+    deriving (Show,Eq)
 
 -- | Define types that can be used as socket address.
 --
@@ -57,7 +62,7 @@ instance Monad SockAddrReader where
 newtype SockAddrWriter a = SockAddrWriter { runSockAddrWriter :: Memory -> IO (a,Memory) }
 
 instance Functor SockAddrWriter where
-    fmap f m = SockAddrWriter $ \mem -> runSockAddrWriter m mem >>= \(a, mem) -> return (f a, mem)
+    fmap f m = SockAddrWriter $ \mem -> runSockAddrWriter m mem >>= \(a, mem2) -> return (f a, mem2)
 instance Applicative SockAddrWriter where
     pure = return
     (<*>) = ap
@@ -79,6 +84,12 @@ readerEnsure n = SockAddrReader $ \(ptr,left) ->
         then error ("reader out of bound: requesting " ++ show n ++ " bytes but have " ++ show left ++ " bytes")
         else return ((), (ptr, left))
 
+sockAddrReaderError :: String -> SockAddrReader ()
+sockAddrReaderError s = error s
+
+sockAddrWriterError :: String -> SockAddrWriter ()
+sockAddrWriterError s = error s
+
 getByte :: SockAddrReader Word8
 getByte = SockAddrReader $ \(ptr, n) ->
     peek ptr >>= \w -> return (w, (ptr `plusPtr` 1, n-1))
@@ -88,8 +99,10 @@ putByte w = SockAddrWriter $ \(ptr,n) ->
     poke ptr w >> return ((), (ptr `plusPtr` 1, n-1))
 
 putSockAddrCommon :: Word8 -> SocketFamily -> SockAddrWriter ()
-putSockAddrCommon len family =
-    undefined
+putSockAddrCommon len (SocketFamily family) = do
+    writerEnsure 2
+    putByte len
+    putByte family
 
 getSockAddrCommon :: SockAddrReader (Word8, SocketFamily)
 getSockAddrCommon = do
@@ -100,6 +113,12 @@ getSockAddrCommon = do
 
 get8 :: SockAddrReader Word8
 get8 = readerEnsure 1 >> getByte
+
+getN16 :: SockAddrReader Word16
+getN16 = do
+    readerEnsure 4
+    toN16 <$> getByte <*> getByte
+  where toN16 c d = (fromIntegral c `shiftL` 8)  .|.  fromIntegral d
 
 getN32 :: SockAddrReader Word32
 getN32 = do
@@ -114,6 +133,11 @@ getN32 = do
 
 put8 :: Word8 -> SockAddrWriter ()
 put8 w = writerEnsure 1 >> putByte w
+
+putN16 :: Word16 -> SockAddrWriter ()
+putN16 w = writerEnsure 2 >> putByte c >> putByte d
+  where c = fromIntegral (w `shiftR` 8)
+        d = fromIntegral w
 
 putN32 :: Word32 -> SockAddrWriter ()
 putN32 w = writerEnsure 4 >> putByte a >> putByte b >> putByte c >> putByte d
