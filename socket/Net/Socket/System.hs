@@ -22,10 +22,7 @@ module Net.Socket.System
     , socketSend
     , socketSendTo
     , socketSendVec
-    , SocketType
-    , socketTypeStream
-    , socketTypeDatagram
-    , socketTypeRaw
+    , SocketType(..)
     -- * Raw socket type
     , Socket
     , SocketAddrRaw(..)
@@ -72,31 +69,20 @@ data SocketError =
 
 instance Exception SocketError
 
-newtype SocketType = SocketType Int -- FIXME, AF_INET6, ?
-
 newtype Socket = Socket CInt
 
 newtype SocketAddrRaw = SocketAddrRaw ByteString
-
-socketTypeStream :: SocketType
-socketTypeStream = SocketType 1
-
-socketTypeDatagram :: SocketType
-socketTypeDatagram = SocketType 2
-
-socketTypeRaw :: SocketType
-socketTypeRaw = SocketType 3
 
 -- | create an unconnected socket
 socketCreate :: SocketFamily
              -> SocketType
              -> Int
              -> IO Socket
-socketCreate (SocketFamily domain) (SocketType ty) protocol =
-    checkRet "socketCreate" id (c_socket (fromIntegral domain) (fromIntegral ty) (fromIntegral protocol)) >>= setupSocket
+socketCreate domain sockType protocol =
+    checkRet "socketCreate" id (c_socket (fromIntegral $ packFamily domain) (fromIntegral $ packSocketType sockType) (fromIntegral protocol)) >>= setupSocket
   where setupSocket :: CInt -> IO Socket
         setupSocket socket = do
-            setNonBlockingFD socket True
+            setNonBlockingFD socket False
             return $ Socket socket
 
 -- | Initiate a connection to an adress on a socket
@@ -105,9 +91,7 @@ socketConnect :: Socket
               -> IO ()
 socketConnect (Socket socket) addrRaw =
     withSocketAddrRaw addrRaw $ \ptr len ->
-        checkRet "socketConnect" (const ()) $ do
-            threadWaitWrite (Fd socket)
-            c_connect socket ptr len
+        checkRet "socketConnect" (const ()) (c_connect socket ptr len)
 
 -- | Bind a name to a socket
 socketBind :: Socket -> SocketAddrRaw -> IO ()

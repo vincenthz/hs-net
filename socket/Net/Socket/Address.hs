@@ -9,18 +9,21 @@
 module Net.Socket.Address
     ( SockAddr(..)
     , SocketFamily(..)
+    , isSupportedFamily
     -- * get
     , SockAddrReader
+    , runSockAddrReader
     , expect
     , sockAddrReaderError
-    , getSockAddrCommon
+    , getFamily
     , get8
     , getN16
     , getN32
     -- * put
     , SockAddrWriter
+    , runSockAddrWriter
     , sockAddrWriterError
-    , putSockAddrCommon
+    , putFamily
     , put8
     , putN16
     , putN32
@@ -33,10 +36,7 @@ import Control.Monad
 import Foreign.Ptr
 import Foreign.Storable
 
--- | A wrapper for the domain of the socket
--- e.g. AF_INET, AF_INET6, 
-newtype SocketFamily = SocketFamily Word8 -- FIXME
-    deriving (Show,Eq)
+import Net.Socket.System.Internal (SocketFamily(..), packFamily, unpackFamily, isSupportedFamily)
 
 -- | Define types that can be used as socket address.
 --
@@ -60,7 +60,6 @@ instance Monad SockAddrReader where
     m1 >>= m2 = SockAddrReader $ \mem -> runSockAddrReader m1 mem >>= \(a, mem2) -> runSockAddrReader (m2 a) mem2
 
 newtype SockAddrWriter a = SockAddrWriter { runSockAddrWriter :: Memory -> IO (a,Memory) }
-
 instance Functor SockAddrWriter where
     fmap f m = SockAddrWriter $ \mem -> runSockAddrWriter m mem >>= \(a, mem2) -> return (f a, mem2)
 instance Applicative SockAddrWriter where
@@ -98,18 +97,11 @@ putByte :: Word8 -> SockAddrWriter ()
 putByte w = SockAddrWriter $ \(ptr,n) ->
     poke ptr w >> return ((), (ptr `plusPtr` 1, n-1))
 
-putSockAddrCommon :: Word8 -> SocketFamily -> SockAddrWriter ()
-putSockAddrCommon len (SocketFamily family) = do
-    writerEnsure 2
-    putByte len
-    putByte family
+putFamily :: SocketFamily -> SockAddrWriter ()
+putFamily = putN16 . fromIntegral . packFamily
 
-getSockAddrCommon :: SockAddrReader (Word8, SocketFamily)
-getSockAddrCommon = do
-    readerEnsure 2
-    len    <- getByte
-    family <- getByte
-    return (len, SocketFamily $ fromIntegral family)
+getFamily :: SockAddrReader SocketFamily
+getFamily = unpackFamily . fromIntegral <$> getN16
 
 get8 :: SockAddrReader Word8
 get8 = readerEnsure 1 >> getByte
