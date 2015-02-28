@@ -52,6 +52,10 @@ import Foreign.Storable
 import Net.Socket.System.Internal
 import Net.Types
 
+-- | This is the in-memory representation of a 'struct sockaddr'
+--
+-- * The SockAddr has been marshalled (See SockAddr)
+-- * The memory is ready to be given to the low level functions
 newtype SocketAddrRaw = SocketAddrRaw ByteString
 
 -- | Define types that can be used as socket address.
@@ -148,15 +152,31 @@ putN32 w = writerEnsure 4 >> putByte a >> putByte b >> putByte c >> putByte d
         c = fromIntegral (w `shiftR` 8)
         d = fromIntegral w
 
+-- | This function is use to extract the SocketFamily from the
+-- SockAddrRaw.
 peekFamily :: SocketAddrRaw
-           -> IO (Maybe SocketFamily)
+           -> IO SocketFamily
 peekFamily (SocketAddrRaw bs)
-    | len < 2 = return Nothing
-    | otherwise       = withForeignPtr fptr $ \ptr -> do
-        (v, _) <- runSockAddrReader (get8 >> getFamily) (ptr `plusPtr` off, fromIntegral len)
-        return $ Just v
+    -- In the case the length of the SockAddrRaw is smaller than 14
+    -- that means we might have made a mistake in the Marshalling of
+    -- the SockAddr or the SockAddrRaw that has been returned from
+    -- accept or another function was wrong.
+    --
+    -- TODO: throw an appropriate Exception
+    | len < 14  = error "Net.Socket.Address.peekFamily: the given SockAddrRaw is smaller than the smallest size (14 bytes)"
+    | otherwise =
+        withForeignPtr fptr $ \ptr ->
+            fst <$> runSockAddrReader readerFunction (ptr `plusPtr` off, fromIntegral len)
   where
     (fptr, off, len) = B.toForeignPtr bs
+    readerFunction :: SockAddrReader SocketFamily
+    readerFunction = do
+        -- TODO: compare the size with the expected size
+        -- * inet: 14
+        -- * inet6: 28
+        -- * ...
+        _ <- get8
+        getFamily
 
 putFamily :: SocketFamily -> SockAddrWriter ()
 putFamily = put8 . fromIntegral . packFamily

@@ -185,12 +185,12 @@ data SockAddrInfo =
 -- (IP address, Port number...)
 getSockAddrInfo :: SocketAddrRaw -> IO SockAddrInfo
 getSockAddrInfo raw = do
-    mfamily <- peekFamily raw
-    return $ case mfamily of
-        Just f | f == socketFamilyInet ->
+    family <- peekFamily raw
+    return $ case family of
+        f | f == socketFamilyInet ->
             let (SockAddrInet addr port) = unMarshalAddr raw
             in SockAddrInfo (IPv4 addr) port
-        Just f | f == socketFamilyInet6 ->
+        f | f == socketFamilyInet6 ->
             let (SockAddrInet6 addr port) = unMarshalAddr raw
             in SockAddrInfo (IPv6 addr) port
         _ -> SockAddrInfoEmpty
