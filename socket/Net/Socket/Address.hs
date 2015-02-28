@@ -138,10 +138,10 @@ putN32 w = writerEnsure 4 >> putByte a >> putByte b >> putByte c >> putByte d
         d = fromIntegral w
 
 putFamily :: SocketFamily -> SockAddrWriter ()
-putFamily = putN16 . fromIntegral . packFamily
+putFamily = put8 . fromIntegral . packFamily
 
 getFamily :: SockAddrReader SocketFamily
-getFamily = unpackFamily . fromIntegral <$> getN16
+getFamily = unpackFamily . fromIntegral <$> get8
 
 putIPv4 :: IPv4Addr -> SockAddrWriter ()
 putIPv4 addr = put8 w1 >> put8 w2 >> put8 w3 >> put8 w4

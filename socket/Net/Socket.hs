@@ -30,6 +30,7 @@ import Control.Applicative
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Internal as B
+import Data.Word (Word8)
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Net.Types
@@ -45,6 +46,13 @@ unlessFamily sf = do
     if family == sf
         then return ()
         else sockAddrReaderError $ "wrong family: expecting \"" ++ show sf ++ "\" but got: " ++ show family
+
+unlessSize :: Word8 -> SockAddrReader ()
+unlessSize size = do
+    r <- get8
+    if r == size
+        then return ()
+        else sockAddrReaderError $ "wrong size: expecting " ++ show size ++ " but got: " ++ show r
 
 -------------------------------------------------------------------------------
 --                          SockAddr Types                                   --
@@ -62,11 +70,13 @@ data SockAddrInet = SockAddrInet IPv4Addr PortNumber
 -- * 8 bytes not used (keep blank)
 instance SockAddr SockAddrInet where
     sockAddrToData (SockAddrInet addr port) = do
+        put8 16
         putFamily AF_INET
         putN16 $ fromIntegral port
         putIPv4 addr
         replicateM_ 8 (put8 0)
     sockAddrFromData = do
+        unlessSize 16
         unlessFamily AF_INET
         port <- portnumber . fromIntegral <$> getN16
         addr <- getIPv4
@@ -79,12 +89,14 @@ data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber
 
 instance SockAddr SockAddrInet6 where
     sockAddrToData (SockAddrInet6 addr port) = do
+        put8 28
         putFamily AF_INET6
         putN16 $ fromIntegral port
         putN32 0 -- TODO: flow label...
         putIPv6 addr
         putN32 0 -- TODO: scope ID
     sockAddrFromData = do
+        unlessSize 28
         unlessFamily AF_INET6
         port <- portnumber . fromIntegral <$> getN16
         label <- getN32
@@ -112,11 +124,13 @@ unixlen = fromIntegral (108 :: Int)
 -- * up to 107 bytes of FilePath
 instance SockAddr SockAddrUNIX where
     sockAddrToData (SockAddrUNIX path) = do
+        put8 110
         unless (length path < unixlen) $ sockAddrWriterError "path length too long"
         putFamily AF_UNIX
         mapM_ put8 $ map B.c2w path
         replicateM_ (unixlen - length path) (put8 0)
     sockAddrFromData = do
+        unlessSize 110
         unlessFamily AF_UNIX
         wl <- replicateM unixlen get8
         let (path, _) = span (> 0) wl
