@@ -48,7 +48,7 @@ instance SockAddr SockAddrInet where
         putIPv4 addr
         replicateM_ 8 (put8 0)
     sockAddrFromData = do
-        withFamily AF_INET
+        unlessFamily AF_INET
         port <- portnumber . fromIntegral <$> getN16
         addr <- getIPv4
         return $ SockAddrInet addr port
@@ -65,7 +65,7 @@ instance SockAddr SockAddrInet6 where
         putIPv6 addr
         putN32 0 -- TODO: scope ID
     sockAddrFromData = do
-        withFamily AF_INET6
+        unlessFamily AF_INET6
         port <- portnumber . fromIntegral <$> getN16
         label <- getN32
         addr <- getIPv6
@@ -93,14 +93,14 @@ instance SockAddr SockAddrUNIX where
         mapM_ put8 $ map B.c2w path
         replicateM_ (unixlen - length path) (put8 0)
     sockAddrFromData = do
-        withFamily AF_UNIX
+        unlessFamily AF_UNIX
         wl <- replicateM unixlen get8
         let (path, _) = span (> 0) wl
         return $ SockAddrUNIX $ map B.w2c path
     sockAddrToParams _ = AF_UNIX
 
-withFamily :: SocketFamily -> SockAddrReader ()
-withFamily sf = do
+unlessFamily :: SocketFamily -> SockAddrReader ()
+unlessFamily sf = do
     family <- getFamily
     if family == sf
         then return ()
