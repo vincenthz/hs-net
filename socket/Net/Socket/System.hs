@@ -264,6 +264,7 @@ withSocketAddrRaw (SocketAddrRaw bs) f =
 -- > int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
 -- > int connect(int socket, const struct sockaddr *address, socklen_t address_len);
 -- > int shutdown(int socket, int how);
+-- > int close(int socket);
 --
 -- > ssize_t send(int socket, const void *buffer, size_t length, int flags);
 -- > ssize_t sendmsg(int socket, const struct msghdr *message, int flags);
