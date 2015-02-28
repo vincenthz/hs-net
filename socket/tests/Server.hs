@@ -15,9 +15,18 @@ startServerOn addr = do
     forever $ do
         (client, clientInfo) <- accept s
         putStrLn $ "accpecting connection from: " ++ show clientInfo
-        forkIO $ forever $ do
-            str <- BC.unpack <$> receive client 512
+        forkIO $ connectionLoop client
+
+connectionLoop :: Socket -> IO ()
+connectionLoop s = do
+    str <- BC.unpack <$> receive s 512
+    if length str == 0
+        then do
+            putStrLn $ "client closed connection"
+            close s
+        else do
             putStrLn $ "receive data: " ++ show str
+            connectionLoop s
 
 main :: IO ()
 main = do

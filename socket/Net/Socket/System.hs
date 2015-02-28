@@ -16,6 +16,7 @@ module Net.Socket.System
     , socketBind
     , socketListen
     , socketAccept
+    , socketClose
     , socketShutdown
     , socketRecv
     , socketRecvFrom
@@ -101,6 +102,10 @@ socketBind (Socket socket) addrRaw =
 socketListen :: Socket -> Int -> IO ()
 socketListen (Socket socket) backlog =
     checkRet "socketListen" (const ()) $ c_listen socket (fromIntegral backlog)
+
+socketClose :: Socket -> IO ()
+socketClose (Socket socket) =
+    checkRet "socketClose" (const ()) $ c_close socket
 
 -- | Accept a connection on a listening socket
 --
@@ -286,6 +291,8 @@ foreign import ccall unsafe "connect"
     c_connect :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
 foreign import ccall unsafe "shutdown"
     c_shutdown :: CInt -> CInt -> IO CInt
+foreign import ccall unsafe "close"
+    c_close :: CInt -> IO CInt
 foreign import ccall unsafe "send"
     c_send :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
 foreign import ccall unsafe "sendmsg"

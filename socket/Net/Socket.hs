@@ -29,6 +29,8 @@ module Net.Socket
       -- ** send/receive
     , send
     , receive
+      -- ** Close/shutdown
+    , close
     ) where
 
 import Control.Applicative
@@ -227,6 +229,9 @@ accept socket = do
     (sClient, saClient) <- socketAccept socket 256
     info <- getSockAddrInfo saClient
     return (sClient, info)
+
+close :: Socket -> IO ()
+close = socketClose
 
 -- | send a ByteString to the given socket
 -- the returned integer is the size of the sent data

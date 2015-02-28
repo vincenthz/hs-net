@@ -1,22 +1,34 @@
 module Main (main) where
 
-import Control.Applicative
 import Control.Monad
 import qualified Data.ByteString.Char8 as BC
 import Net.Socket
 import Net.Socket.System
 
 import System.Environment
+import System.Exit
 
 startServerOn :: SockAddr addr => addr -> IO ()
 startServerOn addr = do
     s <- connect addr Stream
     forever $ do
-        bs <- BC.pack <$> getLine
-        sz <- send s bs
-        if sz /= BC.length bs
-            then error $ "didn't send all the data: " ++ show sz
-            else return ()
+        str <- getLine
+        putStrLn $ show str
+        case span ((/=) ' ') str of
+            ("close", _)    -> do
+                close s
+                exitSuccess
+            ("send", ' ':v) -> do
+                let bs = BC.pack v
+                sz <- send s bs
+                if sz /= BC.length bs
+                    then error $ "didn't send all the data: " ++ show sz
+                    else return ()
+            v -> do
+                print v
+                putStrLn "Command Line Usage:"
+                putStrLn "  close"
+                putStrLn "  send <string to send>"
 
 main :: IO ()
 main = do
