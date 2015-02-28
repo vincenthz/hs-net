@@ -1,8 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Net.Types
-    ( -- * IPv4
-      IPv4Addr
+    ( IP(..)
+      -- * IPv4
+    , IPv4Addr
     , ipv4
     , ipv4ToChunks
     , parseIPv4
@@ -25,6 +26,23 @@ import Data.ByteString (ByteString)
 import Data.String
 import Data.List (intercalate)
 import Numeric (showHex, readHex)
+
+data IP =
+      IPv4 IPv4Addr
+    | IPv6 IPv6Addr
+  deriving (Eq, Ord)
+
+instance Show IP where
+    show (IPv4 ip) = show ip
+    show (IPv6 ip) = show ip
+
+instance Read IP where
+    readsPrec _ s =
+        case (parseIPv4 s, parseIPv6 s) of
+            (Left _, Left _) -> []
+            (Right (ip, r), Left _) -> [(IPv4 ip, r)]
+            (Left _, Right (ip, r)) -> [(IPv6 ip, r)]
+            (Right (ip1, r1), Right (ip2, r2)) -> [(IPv4 ip1, r1), (IPv6 ip2, r2)]
 
 ------------------------------------------------------------------------------
 --                                   IPv4                                   --

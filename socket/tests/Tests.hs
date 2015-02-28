@@ -21,6 +21,12 @@ instance Arbitrary IPv4Addr where
 instance Arbitrary IPv6Addr where
     arbitrary = ipv6 <$> ((,,,,,,,) <$> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary <*> arbitrary)
 
+instance Arbitrary IP where
+    arbitrary = oneof
+        [ IPv4 <$> arbitrary
+        , IPv6 <$> arbitrary
+        ]
+
 instance Arbitrary PortNumber where
     arbitrary = portnumber <$> choose (0, 65535)
 
@@ -36,6 +42,9 @@ testsTypes = testGroup "types"
         ]
     , testGroup "ipv6"
         [ testProperty "read . show == id" (test_readshow_prop :: IPv6Addr -> Bool)
+        ]
+    , testGroup "ip"
+        [ testProperty "read . show == id" (test_readshow_prop :: IP -> Bool)
         ]
     , testGroup "PortNumber"
         [ testProperty "read . show == id" (test_readshow_prop :: PortNumber -> Bool)
