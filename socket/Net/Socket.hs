@@ -8,17 +8,22 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Net.Socket
-    ( SockAddr
+    ( -- * SockAddr
+      SockAddr
+      -- ** Implemented types
     , SockAddrInet(..)
     , SockAddrInet6(..)
     , SockAddrUNIX(..)
+      -- * Socket
+    , Socket
+      -- ** Connections
     , connect
-    , send
-    , receive
+      -- ** Accepting connections
     , listen
     , accept
-    , marshalAddr
-    , unMarshalAddr
+      -- ** send/receive
+    , send
+    , receive
     ) where
 
 import Control.Applicative
@@ -32,6 +37,20 @@ import Net.Socket.Address
 import Net.Socket.System
 import System.IO.Unsafe
 
+-- little helper function to to validate the SocketFamily
+-- while unmarshaling a SockAddr
+unlessFamily :: SocketFamily -> SockAddrReader ()
+unlessFamily sf = do
+    family <- getFamily
+    if family == sf
+        then return ()
+        else sockAddrReaderError $ "wrong family: expecting \"" ++ show sf ++ "\" but got: " ++ show family
+
+-------------------------------------------------------------------------------
+--                          SockAddr Types                                   --
+-------------------------------------------------------------------------------
+
+-- | Create a SockAddr for IPv4
 data SockAddrInet = SockAddrInet IPv4Addr PortNumber
     deriving (Show, Eq)
 
@@ -54,6 +73,7 @@ instance SockAddr SockAddrInet where
         return $ SockAddrInet addr port
     sockAddrToParams _ = AF_INET
 
+-- | Create a SockAddr for IPv6
 data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber
     deriving (Show, Eq)
 
@@ -75,10 +95,14 @@ instance SockAddr SockAddrInet6 where
         return $ SockAddrInet6 addr port
     sockAddrToParams _ = AF_INET6
 
--- | for AF_UNIX (also known as AF_LOCAL)
+-- | SockAddr for UNIX (or LOCAL)
 data SockAddrUNIX = SockAddrUNIX String
     deriving (Show, Eq)
 
+-- as specified for Unix SockAddr
+-- the max size of the FilePath is 108 byte long
+-- (also need to consider that it is expected to terminate the String with
+-- an empty byte -- \x00)
 unixlen :: Integral int => int
 unixlen = fromIntegral (108 :: Int)
 
@@ -99,44 +123,9 @@ instance SockAddr SockAddrUNIX where
         return $ SockAddrUNIX $ map B.w2c path
     sockAddrToParams _ = AF_UNIX
 
-unlessFamily :: SocketFamily -> SockAddrReader ()
-unlessFamily sf = do
-    family <- getFamily
-    if family == sf
-        then return ()
-        else sockAddrReaderError $ "wrong family: expecting \"" ++ show sf ++ "\" by got: " ++ show family
-
--- | Create a connected socket
-connect :: SockAddr addr
-        => addr
-        -> SocketType
-        -> IO Socket
-connect addr socketTy = do
-    sock <- socketCreate (sockAddrToParams addr) socketTy 0
-    socketConnect sock (marshalAddr addr)
-    return sock
-
-send :: Socket -> ByteString -> IO Int
-send socket bs = socketSend socket bs socketMsgNormal
-
-receive :: Socket -> Int -> IO ByteString
-receive socket maxSize =
-    socketRecv socket maxSize socketMsgNormal
-
--- | Create a listening socket
-listen :: SockAddr addr
-       => addr
-       -> SocketType
-       -> Int
-       -> IO Socket
-listen addr socketTy backlog = do
-    sock <- socketCreate (sockAddrToParams addr) socketTy 0
-    socketBind sock (marshalAddr addr)
-    socketListen sock backlog
-    return sock
-
-accept :: Socket -> IO (Socket, SocketAddrRaw)
-accept socket = socketAccept socket 14
+-------------------------------------------------------------------------------
+--                          SockAddr to SockAddrRaw                          --
+-------------------------------------------------------------------------------
 
 marshalAddr :: SockAddr addr
             => addr
@@ -158,3 +147,51 @@ unMarshalAddr (SocketAddrRaw bs) = unsafePerformIO $ withForeignPtr fptr $ \ptr 
 
 maxMarshalAddrSize :: Integral int => int
 maxMarshalAddrSize = fromIntegral (256 :: Int)
+
+-------------------------------------------------------------------------------
+--                          Action on Socket                                 --
+-------------------------------------------------------------------------------
+
+-- | Create a socket and connect it to the given SockAddr
+connect :: SockAddr addr
+        => addr
+        -> SocketType
+        -> IO Socket
+connect addr socketTy = do
+    sock <- socketCreate (sockAddrToParams addr) socketTy 0
+    socketConnect sock (marshalAddr addr)
+    return sock
+
+-- | Create a socket and bind it to the given SockAddr
+-- and also listen on this created socket
+listen :: SockAddr addr
+       => addr
+       -> SocketType
+       -> Int
+       -> IO Socket
+listen addr socketTy backlog = do
+    sock <- socketCreate (sockAddrToParams addr) socketTy 0
+    socketBind sock (marshalAddr addr)
+    socketListen sock backlog
+    return sock
+
+-- | Accept connection from the given Socket
+accept :: Socket -> IO (Socket, SocketAddrRaw)
+accept socket =
+    -- TODO: 14 is the default size of a sockaddr in UNIX
+    -- we might need to consider another kind of size and to see
+    -- how we can determine which type of SockAddr we can return
+    -- or how to give the user a way to know the SockAddr type
+    socketAccept socket 14
+
+-- | send a ByteString to the given socket
+-- the returned integer is the size of the sent data
+send :: Socket -> ByteString -> IO Int
+send socket bs = socketSend socket bs socketMsgNormal
+
+-- | receive a ByteString from the given socket
+receive :: Socket
+        -> Int -- ^ the maximum size to accept from this socket
+        -> IO ByteString -- ^ the length of the returned bytestring is less or equal the given max size.
+receive socket maxSize =
+    socketRecv socket maxSize socketMsgNormal
