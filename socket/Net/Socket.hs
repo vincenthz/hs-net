@@ -45,14 +45,12 @@ instance SockAddr SockAddrInet where
     sockAddrToData (SockAddrInet addr port) = do
         putFamily AF_INET
         putN16 $ fromIntegral port
-        put8 a >> put8 b >> put8 c >> put8 d
+        putIPv4 addr
         replicateM_ 8 (put8 0)
-      where
-        (a,b,c,d) = ipv4ToChunks addr
     sockAddrFromData = do
         withFamily AF_INET
         port <- portnumber . fromIntegral <$> getN16
-        addr <- ipv4 <$> ((,,,) <$> get8 <*> get8 <*> get8 <*> get8)
+        addr <- getIPv4
         return $ SockAddrInet addr port
     sockAddrToParams _ = AF_INET
 
@@ -64,16 +62,13 @@ instance SockAddr SockAddrInet6 where
         putFamily AF_INET6
         putN16 $ fromIntegral port
         putN32 0 -- TODO: flow label...
-        putN16 a >> putN16 b >> putN16 c >> putN16 d
-        putN16 e >> putN16 f >> putN16 g >> putN16 h
+        putIPv6 addr
         putN32 0 -- TODO: scope ID
-      where
-        (a,b,c,d,e,f,g,h) = ipv6ToChunks addr
     sockAddrFromData = do
         withFamily AF_INET6
         port <- portnumber . fromIntegral <$> getN16
         label <- getN32
-        addr <- ipv6 <$> ((,,,,,,,) <$> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16)
+        addr <- getIPv6
         scopeid <- getN32
         unless (label == 0) $ sockAddrReaderError "expecting label == 0"
         unless (scopeid == 0) $ sockAddrReaderError "expecting scopeid == 0"

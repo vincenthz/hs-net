@@ -15,18 +15,22 @@ module Net.Socket.Address
     , runSockAddrReader
     , expect
     , sockAddrReaderError
-    , getFamily
     , get8
     , getN16
     , getN32
+    , getFamily
+    , getIPv4
+    , getIPv6
     -- * put
     , SockAddrWriter
     , runSockAddrWriter
     , sockAddrWriterError
-    , putFamily
     , put8
     , putN16
     , putN32
+    , putFamily
+    , putIPv4
+    , putIPv6
     ) where
 
 import Data.Bits (shiftR, shiftL, (.|.))
@@ -37,6 +41,7 @@ import Foreign.Ptr
 import Foreign.Storable
 
 import Net.Socket.System.Internal (SocketFamily(..), packFamily, unpackFamily, isSupportedFamily)
+import Net.Types
 
 -- | Define types that can be used as socket address.
 --
@@ -97,12 +102,6 @@ putByte :: Word8 -> SockAddrWriter ()
 putByte w = SockAddrWriter $ \(ptr,n) ->
     poke ptr w >> return ((), (ptr `plusPtr` 1, n-1))
 
-putFamily :: SocketFamily -> SockAddrWriter ()
-putFamily = putN16 . fromIntegral . packFamily
-
-getFamily :: SockAddrReader SocketFamily
-getFamily = unpackFamily . fromIntegral <$> getN16
-
 get8 :: SockAddrReader Word8
 get8 = readerEnsure 1 >> getByte
 
@@ -137,6 +136,31 @@ putN32 w = writerEnsure 4 >> putByte a >> putByte b >> putByte c >> putByte d
         b = fromIntegral (w `shiftR` 16)
         c = fromIntegral (w `shiftR` 8)
         d = fromIntegral w
+
+putFamily :: SocketFamily -> SockAddrWriter ()
+putFamily = putN16 . fromIntegral . packFamily
+
+getFamily :: SockAddrReader SocketFamily
+getFamily = unpackFamily . fromIntegral <$> getN16
+
+putIPv4 :: IPv4Addr -> SockAddrWriter ()
+putIPv4 addr = put8 w1 >> put8 w2 >> put8 w3 >> put8 w4
+  where
+    (w1, w2, w3, w4) = ipv4ToChunks addr
+
+getIPv4 :: SockAddrReader IPv4Addr
+getIPv4 = ipv4 <$> ((,,,) <$> get8 <*> get8 <*> get8 <*> get8)
+
+putIPv6 :: IPv6Addr -> SockAddrWriter ()
+putIPv6 addr = do
+    putN16 a >> putN16 b >> putN16 c >> putN16 d
+    putN16 e >> putN16 f >> putN16 g >> putN16 h
+  where
+    (a,b,c,d,e,f,g,h) = ipv6ToChunks addr
+
+getIPv6 :: SockAddrReader IPv6Addr
+getIPv6 =
+    ipv6 <$> ((,,,,,,,) <$> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16 <*> getN16)
 
 --allocate ?
 
