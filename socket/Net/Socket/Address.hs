@@ -107,7 +107,7 @@ get8 = readerEnsure 1 >> getByte
 
 getN16 :: SockAddrReader Word16
 getN16 = do
-    readerEnsure 4
+    readerEnsure 2
     toN16 <$> getByte <*> getByte
   where toN16 c d = (fromIntegral c `shiftL` 8)  .|.  fromIntegral d
 
