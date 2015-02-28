@@ -13,7 +13,8 @@ startServerOn :: SockAddr addr => addr -> IO ()
 startServerOn addr = do
     s <- listen addr Stream 12
     forever $ do
-        (client, clientAddr) <- accept s
+        (client, clientInfo) <- accept s
+        putStrLn $ "accpecting connection from: " ++ show clientInfo
         forkIO $ forever $ do
             str <- BC.unpack <$> receive client 512
             putStrLn $ "receive data: " ++ show str

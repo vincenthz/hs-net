@@ -8,6 +8,7 @@
 --
 module Net.Socket.Address
     ( SockAddr(..)
+    , SocketAddrRaw(..)
     , SocketFamily(..)
     , isSupportedFamily
     -- * get
@@ -18,6 +19,7 @@ module Net.Socket.Address
     , get8
     , getN16
     , getN32
+    , peekFamily
     , getFamily
     , getIPv4
     , getIPv6
@@ -34,14 +36,19 @@ module Net.Socket.Address
     ) where
 
 import Data.Bits (shiftR, shiftL, (.|.))
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Internal as B
 import Data.Word
 import Control.Applicative
 import Control.Monad
+import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
 
 import Net.Socket.System.Internal (SocketFamily(..), packFamily, unpackFamily, isSupportedFamily)
 import Net.Types
+
+newtype SocketAddrRaw = SocketAddrRaw ByteString
 
 -- | Define types that can be used as socket address.
 --
@@ -136,6 +143,16 @@ putN32 w = writerEnsure 4 >> putByte a >> putByte b >> putByte c >> putByte d
         b = fromIntegral (w `shiftR` 16)
         c = fromIntegral (w `shiftR` 8)
         d = fromIntegral w
+
+peekFamily :: SocketAddrRaw
+           -> IO (Maybe SocketFamily)
+peekFamily (SocketAddrRaw bs)
+    | len < 2 = return Nothing
+    | otherwise       = withForeignPtr fptr $ \ptr -> do
+        (v, _) <- runSockAddrReader (get8 >> getFamily) (ptr `plusPtr` off, fromIntegral len)
+        return $ Just v
+  where
+    (fptr, off, len) = B.toForeignPtr bs
 
 putFamily :: SocketFamily -> SockAddrWriter ()
 putFamily = put8 . fromIntegral . packFamily

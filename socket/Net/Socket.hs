@@ -10,10 +10,15 @@
 module Net.Socket
     ( -- * SockAddr
       SockAddr
+    , marshalAddr
+    , unMarshalAddr
       -- ** Implemented types
     , SockAddrInet(..)
     , SockAddrInet6(..)
     , SockAddrUNIX(..)
+      -- ** SockAddr info
+    , SockAddrInfo
+    , getSockAddrInfo
       -- * Socket
     , Socket
       -- ** Connections
@@ -163,6 +168,32 @@ maxMarshalAddrSize :: Integral int => int
 maxMarshalAddrSize = fromIntegral (256 :: Int)
 
 -------------------------------------------------------------------------------
+--                            SockAddr information                           --
+-------------------------------------------------------------------------------
+
+-- | Information from a socket
+--
+-- (see accept, getpeername...)
+data SockAddrInfo =
+      SockAddrInfo IP PortNumber
+    | SockAddrInfoEmpty
+  deriving (Show, Eq)
+
+-- | Return all the information extractable from a SockAddrRaw
+-- (IP address, Port number...)
+getSockAddrInfo :: SocketAddrRaw -> IO SockAddrInfo
+getSockAddrInfo raw = do
+    family <- peekFamily raw
+    return $ case family of
+        Just AF_INET ->
+            let (SockAddrInet addr port) = unMarshalAddr raw
+            in SockAddrInfo (IPv4 addr) port
+        Just AF_INET6 ->
+            let (SockAddrInet6 addr port) = unMarshalAddr raw
+            in SockAddrInfo (IPv6 addr) port
+        _ -> SockAddrInfoEmpty
+
+-------------------------------------------------------------------------------
 --                          Action on Socket                                 --
 -------------------------------------------------------------------------------
 
@@ -190,13 +221,12 @@ listen addr socketTy backlog = do
     return sock
 
 -- | Accept connection from the given Socket
-accept :: Socket -> IO (Socket, SocketAddrRaw)
-accept socket =
-    -- TODO: 14 is the default size of a sockaddr in UNIX
-    -- we might need to consider another kind of size and to see
-    -- how we can determine which type of SockAddr we can return
-    -- or how to give the user a way to know the SockAddr type
-    socketAccept socket 14
+accept :: Socket
+       -> IO (Socket, SockAddrInfo)
+accept socket = do
+    (sClient, saClient) <- socketAccept socket 256
+    info <- getSockAddrInfo saClient
+    return (sClient, info)
 
 -- | send a ByteString to the given socket
 -- the returned integer is the size of the sent data

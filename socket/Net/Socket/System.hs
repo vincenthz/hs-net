@@ -71,8 +71,6 @@ instance Exception SocketError
 
 newtype Socket = Socket CInt
 
-newtype SocketAddrRaw = SocketAddrRaw ByteString
-
 -- | create an unconnected socket
 socketCreate :: SocketFamily
              -> SocketType
