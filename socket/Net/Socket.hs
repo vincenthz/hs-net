@@ -76,17 +76,17 @@ data SockAddrInet = SockAddrInet IPv4Addr PortNumber
 instance SockAddr SockAddrInet where
     sockAddrToData (SockAddrInet addr port) = do
         put8 16
-        putFamily AF_INET
+        putFamily socketFamilyInet
         putN16 $ fromIntegral port
         putIPv4 addr
         replicateM_ 8 (put8 0)
     sockAddrFromData = do
         unlessSize 16
-        unlessFamily AF_INET
+        unlessFamily socketFamilyInet
         port <- portnumber . fromIntegral <$> getN16
         addr <- getIPv4
         return $ SockAddrInet addr port
-    sockAddrToParams _ = AF_INET
+    sockAddrToParams _ = socketFamilyInet
 
 -- | Create a SockAddr for IPv6
 data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber
@@ -95,14 +95,14 @@ data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber
 instance SockAddr SockAddrInet6 where
     sockAddrToData (SockAddrInet6 addr port) = do
         put8 28
-        putFamily AF_INET6
+        putFamily socketFamilyInet6
         putN16 $ fromIntegral port
         putN32 0 -- TODO: flow label...
         putIPv6 addr
         putN32 0 -- TODO: scope ID
     sockAddrFromData = do
         unlessSize 28
-        unlessFamily AF_INET6
+        unlessFamily socketFamilyInet6
         port <- portnumber . fromIntegral <$> getN16
         label <- getN32
         addr <- getIPv6
@@ -110,7 +110,7 @@ instance SockAddr SockAddrInet6 where
         unless (label == 0) $ sockAddrReaderError "expecting label == 0"
         unless (scopeid == 0) $ sockAddrReaderError "expecting scopeid == 0"
         return $ SockAddrInet6 addr port
-    sockAddrToParams _ = AF_INET6
+    sockAddrToParams _ = socketFamilyInet6
 
 -- | SockAddr for UNIX (or LOCAL)
 data SockAddrUNIX = SockAddrUNIX String
@@ -131,16 +131,16 @@ instance SockAddr SockAddrUNIX where
     sockAddrToData (SockAddrUNIX path) = do
         put8 110
         unless (length path < unixlen) $ sockAddrWriterError "path length too long"
-        putFamily AF_UNIX
+        putFamily socketFamilyUnix
         mapM_ put8 $ map B.c2w path
         replicateM_ (unixlen - length path) (put8 0)
     sockAddrFromData = do
         unlessSize 110
-        unlessFamily AF_UNIX
+        unlessFamily socketFamilyUnix
         wl <- replicateM unixlen get8
         let (path, _) = span (> 0) wl
         return $ SockAddrUNIX $ map B.w2c path
-    sockAddrToParams _ = AF_UNIX
+    sockAddrToParams _ = socketFamilyUnix
 
 -------------------------------------------------------------------------------
 --                          SockAddr to SockAddrRaw                          --
@@ -183,12 +183,12 @@ data SockAddrInfo =
 -- (IP address, Port number...)
 getSockAddrInfo :: SocketAddrRaw -> IO SockAddrInfo
 getSockAddrInfo raw = do
-    family <- peekFamily raw
-    return $ case family of
-        Just AF_INET ->
+    mfamily <- peekFamily raw
+    return $ case mfamily of
+        Just f | f == socketFamilyInet ->
             let (SockAddrInet addr port) = unMarshalAddr raw
             in SockAddrInfo (IPv4 addr) port
-        Just AF_INET6 ->
+        Just f | f == socketFamilyInet6 ->
             let (SockAddrInet6 addr port) = unMarshalAddr raw
             in SockAddrInfo (IPv6 addr) port
         _ -> SockAddrInfoEmpty

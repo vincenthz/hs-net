@@ -9,8 +9,12 @@
 module Net.Socket.Address
     ( SockAddr(..)
     , SocketAddrRaw(..)
-    , SocketFamily(..)
-    , isSupportedFamily
+    , SocketFamily
+    , packFamily
+    , unpackFamily
+    , socketFamilyInet
+    , socketFamilyInet6
+    , socketFamilyUnix
     -- * get
     , SockAddrReader
     , runSockAddrReader
@@ -45,7 +49,7 @@ import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
 
-import Net.Socket.System.Internal (SocketFamily(..), packFamily, unpackFamily, isSupportedFamily)
+import Net.Socket.System.Internal
 import Net.Types
 
 newtype SocketAddrRaw = SocketAddrRaw ByteString
