@@ -6,7 +6,7 @@ License:             BSD3
 License-file:        LICENSE
 Copyright:           Vincent Hanquez <vincent@snarc.org>, Nicolas Di Prima <nicolas@di-prima.fr>
 Author:              Vincent Hanquez <vincent@snarc.org>, Nicolas Di Prima <nicolas@di-prima.fr>
-Maintainer:          nicolas@di-prima.fr, vincent@snarc.org
+Maintainer:          vincent@snarc.org, nicolas@di-prima.fr
 Category:            net
 Stability:           experimental
 Build-Type:          Simple
