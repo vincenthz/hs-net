@@ -252,7 +252,7 @@ checkRet _fctName mapper action = do
                     else throwIO $ errnoToSocketError errno
         else return $ mapper r
 
-withSocketAddrRaw :: SocketAddrRaw -> (Ptr CSockAddr -> CSockLen -> IO a) -> IO a
+withSocketAddrRaw :: SocketAddrRaw -> (CSockAddr -> CSockLen -> IO a) -> IO a
 withSocketAddrRaw (SocketAddrRaw bs) f =
     withForeignPtr fptr $ \ptr -> f (castPtr (ptr `plusPtr` ofs)) (CSockLen $ fromIntegral len)
   where (fptr, ofs, len) = B.toForeignPtr bs
@@ -283,13 +283,13 @@ withSocketAddrRaw (SocketAddrRaw bs) f =
 foreign import ccall unsafe "socket"
     c_socket :: CInt -> CInt -> CInt -> IO CInt
 foreign import ccall unsafe "bind"
-    c_bind :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
+    c_bind :: CInt -> CSockAddr -> CSockLen -> IO CInt
 foreign import ccall unsafe "listen"
     c_listen :: CInt -> CInt -> IO CInt
 foreign import ccall unsafe "accept"
-    c_accept :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
+    c_accept :: CInt -> CSockAddr -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "connect"
-    c_connect :: CInt -> Ptr CSockAddr -> CSockLen -> IO CInt
+    c_connect :: CInt -> CSockAddr -> CSockLen -> IO CInt
 foreign import ccall unsafe "shutdown"
     c_shutdown :: CInt -> CInt -> IO CInt
 foreign import ccall unsafe "close"
@@ -299,7 +299,7 @@ foreign import ccall unsafe "send"
 foreign import ccall unsafe "sendmsg"
     c_sendmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSize
 foreign import ccall unsafe "sendto"
-    c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> CSockLen -> IO CSize
+    c_sendto :: CInt -> Ptr Word8 -> CSize -> CInt -> CSockAddr -> CSockLen -> IO CSize
 foreign import ccall unsafe "recv"
     c_recv :: CInt -> Ptr Word8 -> CSize -> CInt -> IO CSize
 {-
@@ -307,17 +307,16 @@ foreign import ccall unsafe "recvmsg"
     c_recvmsg :: CInt -> Ptr MsgHdr -> CInt -> IO CSize
 -}
 foreign import ccall unsafe "recvfrom"
-    c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CSize
+    c_recvfrom :: CInt -> Ptr Word8 -> CSize -> CInt -> CSockAddr -> Ptr CSockLen -> IO CSize
 {-
 foreign import ccall unsafe "getpeername"
-    c_getpeername :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
+    c_getpeername :: CInt -> CSockAddr -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "getsockname"
-    c_getsockname :: CInt -> Ptr CSockAddr -> Ptr CSockLen -> IO CInt
+    c_getsockname :: CInt -> CSockAddr -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "getsockopt"
     c_getsockopt :: CInt -> CInt -> CInt -> Ptr () -> Ptr CSockLen -> IO CInt
 foreign import ccall unsafe "setsockopt"
     c_setsockopt :: CInt -> CInt -> CInt -> Ptr () -> CSockLen -> IO CInt
 -}
 
--- FIXME types
-data CSockAddr
+type CSockAddr = Ptr Word8
