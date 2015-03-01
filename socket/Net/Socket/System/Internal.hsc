@@ -108,7 +108,7 @@ unpackSocketType ty = case unpackSocketType' ty of
     errMsg = "Net.Socket: socket type " ++ show ty ++ " unsupported on this system"
 
 
-data SocketFamily = SocketFamily CInt
+newtype SocketFamily = SocketFamily CInt
   deriving (Show, Eq)
 
 socketFamilyInet :: SocketFamily
