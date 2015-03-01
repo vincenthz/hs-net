@@ -112,24 +112,27 @@ newtype SocketFamily = SocketFamily CInt
   deriving (Show, Eq)
 
 socketFamilyInet :: SocketFamily
+socketFamilyInet =
 #ifdef AF_INET
-socketFamilyInet = SocketFamily (#const AF_INET)
+    SocketFamily (#const AF_INET)
 #else
-socketFamilyInet = error "Socket Family \"AF_INET\" is not available on your platform"
+    throw (SocketFamilyNotAvailable "AF_INET")
 #endif
 
 socketFamilyInet6 :: SocketFamily
+socketFamilyInet6 =
 #ifdef AF_INET6
-socketFamilyInet6 = SocketFamily (#const AF_INET6)
+    SocketFamily (#const AF_INET6)
 #else
-socketFamilyInet6 = error "Socket Family \"AF_INET6\" is not available on your platform"
+    throw (SocketFamilyNotAvailable "AF_INET6")
 #endif
 
 socketFamilyUnix :: SocketFamily
+socketFamilyUnix =
 #ifdef AF_UNIX
-socketFamilyUnix = SocketFamily (#const AF_UNIX)
+    SocketFamily (#const AF_UNIX)
 #else
-socketFamilyUnix = error "Socket Family \"AF_UNIX\" is not available on your platform"
+    throw (SocketFamilyNotAvailable "AF_UNIX")
 #endif
 
 packFamily :: SocketFamily -> CInt
