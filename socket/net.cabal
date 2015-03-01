@@ -4,9 +4,9 @@ Synopsis:            Network
 Description:         Network
 License:             BSD3
 License-file:        LICENSE
-Copyright:           Vincent Hanquez <vincent@snarc.org>
-Author:              Vincent Hanquez <vincent@snarc.org>
-Maintainer:          nicolas@di-prima.fr vincent@snarc.org
+Copyright:           Vincent Hanquez <vincent@snarc.org>, Nicolas Di Prima <nicolas@di-prima.fr>
+Author:              Vincent Hanquez <vincent@snarc.org>, Nicolas Di Prima <nicolas@di-prima.fr>
+Maintainer:          nicolas@di-prima.fr, vincent@snarc.org
 Category:            net
 Stability:           experimental
 Build-Type:          Simple
