@@ -21,6 +21,7 @@ Library
                    , Net.Socket.Address
                    , Net.Socket.System
   Other-modules:     Net.Socket.System.Internal
+                   , Net.Socket.System.Error
   Build-depends:     base >= 4 && < 5
                    , bytestring
   ghc-options:       -Wall -fwarn-tabs
