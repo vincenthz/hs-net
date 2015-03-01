@@ -28,12 +28,15 @@ module Net.Socket.System.Internal
 #include <sys/uio.h>
 
 import Control.Applicative
+import Control.Exception (throw)
 import Data.Bits
 import Data.Monoid
 import Data.Word
 import Foreign.C.Types
 import Foreign.Storable
 import Foreign.Ptr
+
+import Net.Socket.System.Error
 
 -- | Socket Types.
 --
@@ -48,9 +51,9 @@ data SocketType
         | SeqPacket -- ^ SOCK_SEQPACKET
         deriving (Eq, Ord, Read, Show)
 
-packSocketType' :: SocketType -> Maybe CInt
-packSocketType' stype = case Just stype of
-    -- the Just above is to disable GHC's overlapping pattern
+packSocketTypeRaw :: SocketType -> Maybe CInt
+packSocketTypeRaw stype = case Just stype of
+    -- the Just above is to disable GHC overlapping pattern
     -- detection: see comments for packSocketOption
     Just NoSocketType -> Just 0
 #ifdef SOCK_STREAM
@@ -71,15 +74,13 @@ packSocketType' stype = case Just stype of
     _ -> Nothing
 
 packSocketType :: SocketType -> CInt
-packSocketType stype = case packSocketType' stype of
-    Nothing -> error errMsg
-    Just v  -> v
-  where
-    errMsg = concat ["Network.Socket.packSocketType: ",
-                     "socket type ", show stype, " unsupported on this system"]
+packSocketType stype =
+    case packSocketTypeRaw stype of
+        Nothing -> throw $ SocketTypeNotAvailable (show stype)
+        Just v  -> v
 
-unpackSocketType':: CInt -> Maybe SocketType
-unpackSocketType' t = case t of
+unpackSocketTypeRaw :: CInt -> Maybe SocketType
+unpackSocketTypeRaw t = case t of
         0 -> Just NoSocketType
 #ifdef SOCK_STREAM
         (#const SOCK_STREAM) -> Just Stream
@@ -98,15 +99,12 @@ unpackSocketType' t = case t of
 #endif
         _ -> Nothing
 
--- | Try unpackSocketType on the CInt, if it fails throw an error with
--- message starting "Network.Socket." ++ the String parameter
+-- | Try unpackSocketType on the CInt
 unpackSocketType :: CInt -> SocketType
-unpackSocketType ty = case unpackSocketType' ty of
-    Nothing -> error errMsg
-    Just v  -> v
-  where
-    errMsg = "Net.Socket: socket type " ++ show ty ++ " unsupported on this system"
-
+unpackSocketType ty =
+    case unpackSocketTypeRaw ty of
+        Nothing -> throw $ SocketTypeNotAvailable (show ty)
+        Just v  -> v
 
 newtype SocketFamily = SocketFamily CInt
   deriving (Show, Eq)
