@@ -1,4 +1,4 @@
-Name:                net
+Name:                net-socket
 Version:             0.1.0
 Synopsis:            Network
 Description:         Network
@@ -36,13 +36,13 @@ Test-Suite test-net
                    , tasty
                    , tasty-quickcheck
                    , tasty-hunit
-                   , net
+                   , net-socket
   ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
 
 Executable server
   Build-Depends:     base >= 3 && < 5
                    , bytestring
-                   , net
+                   , net-socket
   ghc-options:       -Wall
   Main-Is:           Server.hs
   Hs-Source-Dirs:    tests
@@ -51,7 +51,7 @@ Executable server
 Executable client
   Build-Depends:     base >= 3 && < 5
                    , bytestring
-                   , net
+                   , net-socket
   ghc-options:       -Wall
   Main-Is:           Client.hs
   Hs-Source-Dirs:    tests
