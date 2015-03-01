@@ -40,6 +40,6 @@ main = do
 
 usage :: IO ()
 usage = do
-    putStr "  client unix <filepath>"
-    putStr "  client ipv4 <address> <port>"
-    putStr "  client ipv6 <address> <port>"
+    putStrLn "  client unix <filepath>"
+    putStrLn "  client ipv4 <address> <port>"
+    putStrLn "  client ipv6 <address> <port>"
