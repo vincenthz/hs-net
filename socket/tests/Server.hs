@@ -5,7 +5,6 @@ import Control.Monad
 import Control.Concurrent
 import qualified Data.ByteString.Char8 as BC
 import Net.Socket
-import Net.Socket.System
 
 import System.Environment
 

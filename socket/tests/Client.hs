@@ -3,7 +3,6 @@ module Main (main) where
 import Control.Monad
 import qualified Data.ByteString.Char8 as BC
 import Net.Socket
-import Net.Socket.System
 
 import System.Environment
 import System.Exit

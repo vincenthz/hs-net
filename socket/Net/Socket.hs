@@ -21,6 +21,7 @@ module Net.Socket
     , getSockAddrInfo
       -- * Socket
     , Socket
+    , SocketType(..)
       -- ** Connections
     , connect
       -- ** Accepting connections
