@@ -71,7 +71,8 @@ data SockAddrInet = SockAddrInet IPv4Addr PortNumber
 
 -- as defined in sys/socket.h
 -- sockaddr_in looks like:
--- * 2 bytes for the family
+-- * 1 byte for size
+-- * 1 byte for the family
 -- * 2 bytes for the port number
 -- * 4 bytes for the IPv4 addr
 -- * 8 bytes not used (keep blank)
@@ -119,7 +120,7 @@ data SockAddrUNIX = SockAddrUNIX String
     deriving (Show, Eq)
 
 -- as specified for Unix SockAddr
--- the max size of the FilePath is 108 byte long
+-- the max size of the FilePath is n bytes long
 -- (also need to consider that it is expected to terminate the String with
 -- an empty byte -- \x00)
 unixlen :: Integral int => int
@@ -127,8 +128,9 @@ unixlen = fromIntegral $ (sockAddrSize socketFamilyUnix :: Int) - 2
 
 -- as defined in sys/un.h
 -- sockaddr_in looks like:
--- * 2 bytes for the family
--- * up to 107 bytes of FilePath
+-- * 1 byte for size
+-- * 1 byte for the family
+-- * up to n bytes of FilePath (108 on linux, 104 on OSX...)
 instance SockAddr SockAddrUNIX where
     sockAddrToData (SockAddrUNIX path) = do
         put8 $ sockAddrSize socketFamilyUnix
