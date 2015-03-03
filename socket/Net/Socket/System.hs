@@ -28,6 +28,7 @@ module Net.Socket.System
     , Socket
     , SocketAddrRaw(..)
     , SocketMsgFlags(..)
+    , sockAddrSize
     , socketMsgNormal
     , socketMsgOOB
     , socketMsgPeek

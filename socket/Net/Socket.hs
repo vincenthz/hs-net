@@ -77,13 +77,13 @@ data SockAddrInet = SockAddrInet IPv4Addr PortNumber
 -- * 8 bytes not used (keep blank)
 instance SockAddr SockAddrInet where
     sockAddrToData (SockAddrInet addr port) = do
-        put8 16
+        put8 $ sockAddrSize socketFamilyInet
         putFamily socketFamilyInet
         putN16 $ fromIntegral port
         putIPv4 addr
         replicateM_ 8 (put8 0)
     sockAddrFromData = do
-        unlessSize 16
+        unlessSize $ sockAddrSize socketFamilyInet
         unlessFamily socketFamilyInet
         port <- portnumber . fromIntegral <$> getN16
         addr <- getIPv4
@@ -96,14 +96,14 @@ data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber
 
 instance SockAddr SockAddrInet6 where
     sockAddrToData (SockAddrInet6 addr port) = do
-        put8 28
+        put8 $ sockAddrSize socketFamilyInet6
         putFamily socketFamilyInet6
         putN16 $ fromIntegral port
         putN32 0 -- TODO: flow label...
         putIPv6 addr
         putN32 0 -- TODO: scope ID
     sockAddrFromData = do
-        unlessSize 28
+        unlessSize $ sockAddrSize socketFamilyInet6
         unlessFamily socketFamilyInet6
         port <- portnumber . fromIntegral <$> getN16
         label <- getN32
@@ -123,7 +123,7 @@ data SockAddrUNIX = SockAddrUNIX String
 -- (also need to consider that it is expected to terminate the String with
 -- an empty byte -- \x00)
 unixlen :: Integral int => int
-unixlen = fromIntegral (108 :: Int)
+unixlen = fromIntegral $ (sockAddrSize socketFamilyUnix :: Int) - 2
 
 -- as defined in sys/un.h
 -- sockaddr_in looks like:
@@ -131,13 +131,13 @@ unixlen = fromIntegral (108 :: Int)
 -- * up to 107 bytes of FilePath
 instance SockAddr SockAddrUNIX where
     sockAddrToData (SockAddrUNIX path) = do
-        put8 110
+        put8 $ sockAddrSize socketFamilyUnix
         unless (length path < unixlen) $ sockAddrWriterError "path length too long"
         putFamily socketFamilyUnix
         mapM_ put8 $ map B.c2w path
         replicateM_ (unixlen - length path) (put8 0)
     sockAddrFromData = do
-        unlessSize 110
+        unlessSize $ sockAddrSize socketFamilyUnix
         unlessFamily socketFamilyUnix
         wl <- replicateM unixlen get8
         let (path, _) = span (> 0) wl

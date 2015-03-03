@@ -21,10 +21,14 @@ module Net.Socket.System.Internal
     , socketFamilyInet
     , socketFamilyInet6
     , socketFamilyUnix
+
+    , sockAddrSize
     ) where
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
 #include <sys/uio.h>
 
 import Control.Applicative
@@ -138,6 +142,21 @@ packFamily (SocketFamily sf) = sf
 
 unpackFamily :: CInt -> SocketFamily
 unpackFamily sf = SocketFamily sf
+
+-- | This function returns the expected size of the SockAddr structure
+-- for the given SocketFamily
+sockAddrSize :: Integral int => SocketFamily -> int
+sockAddrSize sf
+#ifdef AF_INET
+    | sf == socketFamilyInet  = #const sizeof(struct sockaddr_in)
+#endif
+#ifdef AF_INET6
+    | sf == socketFamilyInet6 = #const sizeof(struct sockaddr_in6)
+#endif
+#ifdef AF_UNIX
+    | sf == socketFamilyUnix  = #const sizeof(struct sockaddr_un)
+#endif
+    | otherwise = throw (SocketFamilyNotAvailable $ show sf)
 
 newtype SocketMsgFlags = SocketMsgFlags CInt
     deriving (Storable)
