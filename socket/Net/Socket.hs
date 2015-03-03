@@ -241,6 +241,10 @@ send :: Socket -> ByteString -> IO Int
 send socket bs = socketSend socket bs socketMsgNormal
 
 -- | receive a ByteString from the given socket
+--
+-- In case of a TCP connection:
+-- If the returned bytestring is empty, that means the peer has closed
+-- its half side of connection.
 receive :: Socket
         -> Int -- ^ the maximum size to accept from this socket
         -> IO ByteString -- ^ the length of the returned bytestring is less or equal the given max size.
