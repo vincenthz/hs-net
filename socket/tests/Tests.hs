@@ -8,6 +8,8 @@ import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
 
+import Scenario
+
 testEquality :: (Show value, Eq value)
              => value -> value
              -> Bool
@@ -81,9 +83,40 @@ testsSockAddrs = testGroup "socket"
         ]
     ]
 
-tests = testGroup "net"
+testProperties = testGroup "property"
     [ testsTypes
     , testsSockAddrs
     ]
 
-main = defaultMain tests
+runUnitTest :: (Show addr, SockAddr addr)
+            => addr -- ^ Server
+            -> addr -- ^ Client
+            -> SocketType
+            -> IO ()
+runUnitTest server client sType = do
+    let conf = defaultScenarioConfig server client sType
+    res <- startTest conf
+    case res of
+        Left err -> assertFailure err
+        Right _  -> return ()
+
+testUnit :: (Show addr, SockAddr addr)
+         => String
+         -> addr
+         -> addr
+         -> SocketType
+         -> TestTree
+testUnit name server client sType = testCase name (runUnitTest server client sType)
+
+testUnits = testGroup "units"
+    [ testUnit "TCP - inet"  (SockAddrInet  (read "0.0.0.0")  (read "4343")) (SockAddrInet  (read "127.0.0.1") (read "4343")) Stream
+    , testUnit "TCP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Stream
+    -- TODO: got exception 102 (operation not supported)
+    --, testUnit "UDP - inet"  (SockAddrInet  (read "0.0.0.0")  (read "4343")) (SockAddrInet  (read "127.0.0.1") (read "4343")) Datagram
+    --, testUnit "UDP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Datagram
+    ]
+
+main = defaultMain $ testGroup "net"
+    [ testProperties
+    , testUnits
+    ]

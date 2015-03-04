@@ -31,12 +31,14 @@ Test-Suite test-net
   hs-source-dirs:    tests
   Main-is:           Tests.hs
   Build-Depends:     base >= 3 && < 5
+                   , bytestring
                    , mtl
+                   , net-socket
                    , QuickCheck >= 2
+                   , stm
                    , tasty
                    , tasty-quickcheck
                    , tasty-hunit
-                   , net-socket
   ghc-options:       -Wall -fno-warn-orphans -fno-warn-missing-signatures
 
 Executable server
