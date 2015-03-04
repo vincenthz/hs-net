@@ -16,9 +16,6 @@ module Net.Socket
     , SockAddrInet(..)
     , SockAddrInet6(..)
     , SockAddrUNIX(..)
-      -- ** SockAddr info
-    , SockAddrInfo
-    , getSockAddrInfo
       -- * Socket
     , Socket
     , SocketType(..)
@@ -173,32 +170,6 @@ maxMarshalAddrSize :: Integral int => int
 maxMarshalAddrSize = fromIntegral (256 :: Int)
 
 -------------------------------------------------------------------------------
---                            SockAddr information                           --
--------------------------------------------------------------------------------
-
--- | Information from a socket
---
--- (see accept, getpeername...)
-data SockAddrInfo =
-      SockAddrInfo IP PortNumber
-    | SockAddrInfoEmpty
-  deriving (Show, Eq)
-
--- | Return all the information extractable from a SockAddrRaw
--- (IP address, Port number...)
-getSockAddrInfo :: SocketAddrRaw -> IO SockAddrInfo
-getSockAddrInfo raw = do
-    family <- peekFamily raw
-    return $ case family of
-        f | f == socketFamilyInet ->
-            let (SockAddrInet addr port) = unMarshalAddr raw
-            in SockAddrInfo (IPv4 addr) port
-        f | f == socketFamilyInet6 ->
-            let (SockAddrInet6 addr port) = unMarshalAddr raw
-            in SockAddrInfo (IPv6 addr) port
-        _ -> SockAddrInfoEmpty
-
--------------------------------------------------------------------------------
 --                          Action on Socket                                 --
 -------------------------------------------------------------------------------
 
@@ -226,12 +197,12 @@ listen addr socketTy backlog = do
     return sock
 
 -- | Accept connection from the given Socket
-accept :: Socket
-       -> IO (Socket, SockAddrInfo)
+accept :: SockAddr a
+       => Socket
+       -> IO (Socket, a)
 accept socket = do
     (sClient, saClient) <- socketAccept socket 256
-    info <- getSockAddrInfo saClient
-    return (sClient, info)
+    return (sClient, unMarshalAddr saClient)
 
 close :: Socket -> IO ()
 close = socketClose

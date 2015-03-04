@@ -8,13 +8,19 @@ import Net.Socket
 
 import System.Environment
 
-startServerOn :: SockAddr addr => addr -> IO ()
+startServerOn :: (Show addr, SockAddr addr) => addr -> IO ()
 startServerOn addr = do
     s <- listen addr Stream 12
     forever $ do
-        (client, clientInfo) <- accept s
+        (client, clientInfo) <- acceptFunction addr s
         putStrLn $ "accpecting connection from: " ++ show clientInfo
         forkIO $ connectionLoop client
+  where
+    acceptFunction :: (Show addr, SockAddr addr)
+                   => addr
+                   -> Socket
+                   -> IO (Socket, addr)
+    acceptFunction _ s = accept s
 
 connectionLoop :: Socket -> IO ()
 connectionLoop s = do
