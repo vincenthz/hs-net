@@ -53,8 +53,8 @@ testsTypes = testGroup "types"
         ]
     ]
 
-instance Arbitrary SockAddrInet where
-    arbitrary = SockAddrInet <$> arbitrary <*> arbitrary
+instance Arbitrary SockAddrInet4 where
+    arbitrary = SockAddrInet4 <$> arbitrary <*> arbitrary
 instance Arbitrary SockAddrInet6 where
     arbitrary = SockAddrInet6 <$> arbitrary <*> arbitrary
 instance Arbitrary SockAddrUNIX where
@@ -73,7 +73,7 @@ test_sockaddr_prop addr =
 
 testsSockAddrs = testGroup "socket"
     [ testGroup "SockAddrInet"
-        [ testProperty "marshalling" (test_sockaddr_prop :: (SockAddrInet -> Bool))
+        [ testProperty "marshalling" (test_sockaddr_prop :: (SockAddrInet4 -> Bool))
         ]
     , testGroup "SockAddrInet6"
         [ testProperty "marshalling" (test_sockaddr_prop :: (SockAddrInet6 -> Bool))
@@ -109,10 +109,10 @@ testUnit :: (Show addr, SockAddr addr)
 testUnit name server client sType = testCase name (runUnitTest server client sType)
 
 testUnits = testGroup "units"
-    [ testUnit "TCP - inet"  (SockAddrInet  (read "0.0.0.0")  (read "4343")) (SockAddrInet  (read "127.0.0.1") (read "4343")) Stream
+    [ testUnit "TCP - inet"  (SockAddrInet4  (read "0.0.0.0")  (read "4343")) (SockAddrInet4  (read "127.0.0.1") (read "4343")) Stream
     , testUnit "TCP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Stream
     -- TODO: got exception 102 (operation not supported)
-    --, testUnit "UDP - inet"  (SockAddrInet  (read "0.0.0.0")  (read "4343")) (SockAddrInet  (read "127.0.0.1") (read "4343")) Datagram
+    --, testUnit "UDP - inet"  (SockAddrInet4  (read "0.0.0.0")  (read "4343")) (SockAddrInet4  (read "127.0.0.1") (read "4343")) Datagram
     --, testUnit "UDP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Datagram
     ]
 
