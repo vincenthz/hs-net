@@ -18,7 +18,7 @@ module Net.Socket.System.Internal
     , SocketFamily
     , packFamily
     , unpackFamily
-    , socketFamilyInet
+    , socketFamilyInet4
     , socketFamilyInet6
     , socketFamilyUnix
 
@@ -113,8 +113,8 @@ unpackSocketType ty =
 newtype SocketFamily = SocketFamily CInt
   deriving (Show, Eq)
 
-socketFamilyInet :: SocketFamily
-socketFamilyInet =
+socketFamilyInet4 :: SocketFamily
+socketFamilyInet4 =
 #ifdef AF_INET
     SocketFamily (#const AF_INET)
 #else
@@ -148,7 +148,7 @@ unpackFamily sf = SocketFamily sf
 sockAddrSize :: Integral int => SocketFamily -> int
 sockAddrSize sf
 #ifdef AF_INET
-    | sf == socketFamilyInet  = #const sizeof(struct sockaddr_in)
+    | sf == socketFamilyInet4 = #const sizeof(struct sockaddr_in)
 #endif
 #ifdef AF_INET6
     | sf == socketFamilyInet6 = #const sizeof(struct sockaddr_in6)

@@ -12,7 +12,7 @@ module Net.Socket.Address
     , SocketFamily
     , packFamily
     , unpackFamily
-    , socketFamilyInet
+    , socketFamilyInet4
     , socketFamilyInet6
     , socketFamilyUnix
     -- * get

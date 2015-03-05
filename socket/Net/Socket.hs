@@ -13,7 +13,7 @@ module Net.Socket
     , marshalAddr
     , unMarshalAddr
       -- ** Implemented types
-    , SockAddrInet(..)
+    , SockAddrInet4(..)
     , SockAddrInet6(..)
     , SockAddrUNIX(..)
       -- * Socket
@@ -64,7 +64,7 @@ unlessSize size = do
 -------------------------------------------------------------------------------
 
 -- | Create a SockAddr for IPv4
-data SockAddrInet = SockAddrInet IPv4Addr PortNumber
+data SockAddrInet4 = SockAddrInet4 IPv4Addr PortNumber
     deriving (Show, Eq)
 
 -- as defined in sys/socket.h
@@ -74,20 +74,20 @@ data SockAddrInet = SockAddrInet IPv4Addr PortNumber
 -- * 2 bytes for the port number
 -- * 4 bytes for the IPv4 addr
 -- * 8 bytes not used (keep blank)
-instance SockAddr SockAddrInet where
-    sockAddrToData (SockAddrInet addr port) = do
-        put8 $ sockAddrSize socketFamilyInet
-        putFamily socketFamilyInet
+instance SockAddr SockAddrInet4 where
+    sockAddrToData (SockAddrInet4 addr port) = do
+        put8 $ sockAddrSize socketFamilyInet4
+        putFamily socketFamilyInet4
         putN16 $ fromIntegral port
         putIPv4 addr
         replicateM_ 8 (put8 0)
     sockAddrFromData = do
-        unlessSize $ sockAddrSize socketFamilyInet
-        unlessFamily socketFamilyInet
+        unlessSize $ sockAddrSize socketFamilyInet4
+        unlessFamily socketFamilyInet4
         port <- portnumber . fromIntegral <$> getN16
         addr <- getIPv4
-        return $ SockAddrInet addr port
-    sockAddrToParams _ = socketFamilyInet
+        return $ SockAddrInet4 addr port
+    sockAddrToParams _ = socketFamilyInet4
 
 -- | Create a SockAddr for IPv6
 data SockAddrInet6 = SockAddrInet6 IPv6Addr PortNumber

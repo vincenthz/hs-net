@@ -35,7 +35,7 @@ main = do
     case args of
         [] -> usage
         "unix":path:[]      -> startServerOn $ SockAddrUNIX path
-        "ipv4":addr:port:[] -> startServerOn $ SockAddrInet  (read addr) (read port)
+        "ipv4":addr:port:[] -> startServerOn $ SockAddrInet4 (read addr) (read port)
         "ipv6":addr:port:[] -> startServerOn $ SockAddrInet6 (read addr) (read port)
         _ -> usage
 
