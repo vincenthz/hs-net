@@ -83,10 +83,15 @@ server :: SockAddr addr
        -> ScenarioTChan addr
        -> IO ()
 server scfg chan = do
-    s <- listen (scSockAddrServer scfg) (scSocketType scfg) (scNumAcceptedConn scfg)
-    forever $ do
-        (socket, info) <- accept s
-        forkIO $ serverLoop scfg chan socket info
+    s <- bind   (scSockAddrServer scfg) (scSocketType scfg)
+    case scSocketType scfg of
+        Datagram -> forever $ serverLoop scfg chan s (scSockAddrServer scfg)
+        Stream   -> do
+            s <- listen s (scNumAcceptedConn scfg)
+            forever $ do
+                (socket, info) <- accept s
+                forkIO $ serverLoop scfg chan socket info
+        _ -> error $ "Server: SocketType not supported: " ++ show (scSocketType scfg)
 
 serverLoop :: SockAddr addr
            => ScenarioConfig addr

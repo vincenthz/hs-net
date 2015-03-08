@@ -5,15 +5,20 @@ import Control.Monad
 import Control.Concurrent
 import qualified Data.ByteString.Char8 as BC
 import Net.Socket
+import Net.Socket.System
 
 import System.Environment
 
-startServerOn :: (Show addr, SockAddr addr) => addr -> IO ()
-startServerOn addr = do
-    s <- listen addr Stream 12
+debug :: String -> IO ()
+debug = putStrLn
+
+startServerTCP :: (Show addr, SockAddr addr) => addr -> IO ()
+startServerTCP addr = do
+    s <- bind addr Stream
+    s <- listen s 12
     forever $ do
         (client, clientInfo) <- acceptFunction addr s
-        putStrLn $ "accpecting connection from: " ++ show clientInfo
+        debug $ "accpecting connection from: " ++ show clientInfo
         forkIO $ connectionLoop client
   where
     acceptFunction :: (Show addr, SockAddr addr)
@@ -22,15 +27,30 @@ startServerOn addr = do
                    -> IO (Socket, addr)
     acceptFunction _ s = accept s
 
+startServerUDP :: (Show addr, SockAddr addr) => addr -> IO ()
+startServerUDP addr = do
+    s <- bind addr Datagram
+    forever $ connectionLoop s
+
+startServerOn :: (Show addr, SockAddr addr)
+              => String
+              -> addr
+              -> IO ()
+startServerOn t addr =
+    case t of
+        "tcp" -> startServerTCP addr
+        "udp" -> startServerUDP addr
+        _     -> error $ "Socket Family Type not found: " ++ show t
+
 connectionLoop :: Socket -> IO ()
 connectionLoop s = do
     str <- BC.unpack <$> receive s 512
     if length str == 0
         then do
-            putStrLn $ "client closed connection"
+            debug $ "client closed connection"
             close s
         else do
-            putStrLn $ "receive data: " ++ show str
+            debug $ "receive data: " ++ show str
             connectionLoop s
 
 main :: IO ()
@@ -38,9 +58,9 @@ main = do
     args <- getArgs
     case args of
         [] -> usage
-        "unix":path:[]      -> startServerOn $ SockAddrUNIX path
-        "ipv4":addr:port:[] -> startServerOn $ SockAddrInet4 (read addr) (read port)
-        "ipv6":addr:port:[] -> startServerOn $ SockAddrInet6 (read addr) (read port)
+        "unix":t:path:[]      -> startServerOn t $ SockAddrUNIX path
+        "ipv4":t:addr:port:[] -> startServerOn t $ SockAddrInet4 (read addr) (read port)
+        "ipv6":t:addr:port:[] -> startServerOn t $ SockAddrInet6 (read addr) (read port)
         _ -> usage
 
 usage :: IO ()

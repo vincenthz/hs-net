@@ -7,9 +7,9 @@ import Net.Socket
 import System.Environment
 import System.Exit
 
-startServerOn :: SockAddr addr => addr -> IO ()
-startServerOn addr = do
-    s <- connect addr Stream
+startServerOn :: SockAddr addr => SocketType -> addr -> IO ()
+startServerOn socketType addr = do
+    s <- connect addr socketType
     forever $ do
         str <- getLine
         putStrLn $ show str
@@ -34,10 +34,16 @@ main = do
     args <- getArgs
     case args of
         [] -> usage
-        "unix":path:[]      -> startServerOn $ SockAddrUNIX path
-        "ipv4":addr:port:[] -> startServerOn $ SockAddrInet4 (read addr) (read port)
-        "ipv6":addr:port:[] -> startServerOn $ SockAddrInet6 (read addr) (read port)
+        "unix":t:path:[]      -> startServerOn (toType t) $ SockAddrUNIX path
+        "ipv4":t:addr:port:[] -> startServerOn (toType t) $ SockAddrInet4 (read addr) (read port)
+        "ipv6":t:addr:port:[] -> startServerOn (toType t) $ SockAddrInet6 (read addr) (read port)
         _ -> usage
+  where
+    toType :: String -> SocketType
+    toType str = case str of
+        "udp" -> Datagram
+        "tcp" -> Stream
+        _     -> error $ "Socket Type type not found " ++ show str
 
 usage :: IO ()
 usage = do

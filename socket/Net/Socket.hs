@@ -9,7 +9,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Net.Socket
     ( -- * SockAddr
-      SockAddr
+      SockAddr(..)
     , marshalAddr
     , unMarshalAddr
       -- ** Implemented types
@@ -22,6 +22,7 @@ module Net.Socket
       -- ** Connections
     , connect
       -- ** Accepting connections
+    , bind
     , listen
     , accept
       -- ** send/receive
@@ -183,16 +184,21 @@ connect addr socketTy = do
     socketConnect sock (marshalAddr addr)
     return sock
 
--- | Create a socket and bind it to the given SockAddr
--- and also listen on this created socket
-listen :: SockAddr addr
-       => addr
-       -> SocketType
-       -> Int
-       -> IO Socket
-listen addr socketTy backlog = do
+bind :: SockAddr addr
+     => addr
+     -> SocketType
+     -> IO Socket
+bind addr socketTy = do
     sock <- socketCreate (sockAddrToParams addr) socketTy 0
     socketBind sock (marshalAddr addr)
+    return sock
+
+-- | Create a socket and bind it to the given SockAddr
+-- and also listen on this created socket
+listen :: Socket
+       -> Int
+       -> IO Socket
+listen sock backlog = do
     socketListen sock backlog
     return sock
 
