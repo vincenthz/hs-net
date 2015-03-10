@@ -34,7 +34,7 @@ main = do
     args <- getArgs
     case args of
         [] -> usage
-        "unix":t:path:[]      -> startServerOn (toType t) $ SockAddrUNIX path
+        "unix":path:[]        -> startServerOn Stream     $ SockAddrUNIX path
         "ipv4":t:addr:port:[] -> startServerOn (toType t) $ SockAddrInet4 (read addr) (read port)
         "ipv6":t:addr:port:[] -> startServerOn (toType t) $ SockAddrInet6 (read addr) (read port)
         _ -> usage
@@ -48,5 +48,5 @@ main = do
 usage :: IO ()
 usage = do
     putStrLn "  client unix <filepath>"
-    putStrLn "  client ipv4 <address> <port>"
-    putStrLn "  client ipv6 <address> <port>"
+    putStrLn "  client [tcp|udp] ipv4 <address> <port>"
+    putStrLn "  client [tcp|udp] ipv6 <address> <port>"

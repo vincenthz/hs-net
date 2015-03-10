@@ -5,7 +5,6 @@ import Control.Monad
 import Control.Concurrent
 import qualified Data.ByteString.Char8 as BC
 import Net.Socket
-import Net.Socket.System
 
 import System.Environment
 
@@ -15,7 +14,7 @@ debug = putStrLn
 startServerTCP :: (Show addr, SockAddr addr) => addr -> IO ()
 startServerTCP addr = do
     s <- bind addr Stream
-    s <- listen s 12
+    _ <- listen s 12
     forever $ do
         (client, clientInfo) <- acceptFunction addr s
         debug $ "accpecting connection from: " ++ show clientInfo
@@ -58,13 +57,13 @@ main = do
     args <- getArgs
     case args of
         [] -> usage
-        "unix":t:path:[]      -> startServerOn t $ SockAddrUNIX path
-        "ipv4":t:addr:port:[] -> startServerOn t $ SockAddrInet4 (read addr) (read port)
-        "ipv6":t:addr:port:[] -> startServerOn t $ SockAddrInet6 (read addr) (read port)
+        "unix":path:[]        -> startServerOn "tcp" $ SockAddrUNIX path
+        "ipv4":t:addr:port:[] -> startServerOn t     $ SockAddrInet4 (read addr) (read port)
+        "ipv6":t:addr:port:[] -> startServerOn t     $ SockAddrInet6 (read addr) (read port)
         _ -> usage
 
 usage :: IO ()
 usage = do
     putStrLn "  client unix <filepath>"
-    putStrLn "  client ipv4 <address> <port>"
-    putStrLn "  client ipv6 <address> <port>"
+    putStrLn "  client ipv4 [tcp|udp] <address> <port>"
+    putStrLn "  client ipv6 [tcp|udp] <address> <port>"
