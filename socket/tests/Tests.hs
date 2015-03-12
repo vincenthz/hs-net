@@ -110,9 +110,11 @@ testUnit name server client sType = testCase name (runUnitTest server client sTy
 
 testUnits = testGroup "units"
     [ testUnit "TCP - inet"  (SockAddrInet4  (read "0.0.0.0")  (read "4343")) (SockAddrInet4  (read "127.0.0.1") (read "4343")) Stream
-    , testUnit "TCP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Stream
+    , testUnit "TCP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344"))  (SockAddrInet6 (read ":::::::1")  (read "4344"))  Stream
+    , testUnit "TCP - UNIX"  (SockAddrUNIX  "/tmp/lol.sock.test.tcp")         (SockAddrUNIX "/tmp/lol.sock.test.tcp")           Stream
     , testUnit "UDP - inet"  (SockAddrInet4  (read "0.0.0.0")  (read "4343")) (SockAddrInet4  (read "127.0.0.1") (read "4343")) Datagram
-    , testUnit "UDP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344")) (SockAddrInet6 (read ":::::::1")  (read "4344")) Datagram
+    , testUnit "UDP - inet6" (SockAddrInet6 (read ":::::::0") (read "4344"))  (SockAddrInet6 (read ":::::::1")  (read "4344"))  Datagram
+    , testUnit "UDP - UNIX"  (SockAddrUNIX  "/tmp/lol.sock.test.udp")         (SockAddrUNIX "/tmp/lol.sock.test.udp")           Datagram
     ]
 
 main = defaultMain $ testGroup "net"

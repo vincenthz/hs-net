@@ -87,10 +87,12 @@ server scfg chan = do
     case scSocketType scfg of
         Datagram -> forever $ serverLoop scfg chan s (scSockAddrServer scfg)
         Stream   -> do
-            s <- listen s (scNumAcceptedConn scfg)
+            s' <- listen s (scNumAcceptedConn scfg)
+            -- TODO: loop until a condition is true...
             forever $ do
-                (socket, info) <- accept s
+                (socket, info) <- accept s'
                 forkIO $ serverLoop scfg chan socket info
+            close s
         _ -> error $ "Server: SocketType not supported: " ++ show (scSocketType scfg)
 
 serverLoop :: SockAddr addr
